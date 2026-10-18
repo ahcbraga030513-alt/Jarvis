@@ -8,6 +8,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <title>JARVIS</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 <style>
 :root{--c:#00d0ff}
@@ -622,6 +624,7 @@ function draw(){
 cv.addEventListener('click',()=>{if(!document.body.classList.contains('awake')){wakeUp();return}if(active&&!busy&&!speaking)onClap()});
 
 applyCfg();fillVoices();setState('off');draw();
+if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 if(NO_TTS)log('Este navegador não tem voz falada. Abra o link no Chrome (Android).');
 if(!(window.SpeechRecognition||window.webkitSpeechRecognition))log('Este navegador não tem reconhecimento de voz. Abra o link no Chrome (Android).');
 </script>

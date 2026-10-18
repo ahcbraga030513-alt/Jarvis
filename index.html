@@ -136,7 +136,7 @@ body:not(.awake) #clock{opacity:.8}
   <h3 style="margin-top:26px">INTELIGÊNCIA (IA)</h3>
   <label>IA padrão (responde o que não for comando)</label>
   <select id="s_ai">
-    <option value="none">Nenhuma</option>
+    <option value="none">Jarvis grátis (sem chave)</option>
     <option value="gemini">Gemini (Google)</option>
     <option value="openai">ChatGPT (OpenAI)</option>
     <option value="grok">Grok (xAI)</option>
@@ -329,19 +329,17 @@ function handle(raw){
     if(mm&&/^[\d\s+\-*/.]+$/.test(mm[0])){try{const r=Function('"use strict";return ('+mm[0]+')')();say(`O resultado é ${Math.round(r*10000)/10000}.`);return}catch(e){}}}
   if((m=t.match(/(?:abrir|abra|abre) (?:o |a )?(\w+)/))&&APPS[m[1]]){say(`Abrindo ${m[1]}.`);openUrl(APPS[m[1]]);return}
   if((m=t.match(/^(?:por favor )?(?:tocar|toque|toca|coloque|colocar) (.+)/))){say(`Procurando ${m[1]} no YouTube.`);openUrl('https://www.youtube.com/results?search_query='+q(m[1]));return}
-  if((m=t.match(/^(?:por favor )?(?:pesquisar|pesquise|procure|procurar|busque) (?:por |sobre )?(.+)/))){say(`Pesquisando ${m[1]}.`);openUrl('https://www.google.com/search?q='+q(m[1]));return}
+  if((m=t.match(/^(?:por favor )?(?:pesquisar|pesquise|procure|procurar|busque) (?:por |sobre )?(.+)/))){askAI(m[1]);return}
   if((m=t.match(/(?:rota para|ir para|como chegar em|navegar para) (.+)/))){say(`Traçando rota para ${m[1]}.`);openUrl('https://www.google.com/maps/dir/?api=1&destination='+q(m[1]));return}
-  if(/(previsao do tempo|vai chover|clima hoje|como esta o clima)/.test(t)){say('Verificando a previsão do tempo.');openUrl('https://www.google.com/search?q='+q('previsão do tempo'));return}
+  if(/(previsao do tempo|vai chover|clima hoje|como esta o clima|qual a temperatura|quantos graus)/.test(t)){weather(t);return}
   if(/piada/.test(t)){say(PIADAS[Math.floor(Math.random()*PIADAS.length)]);return}
   if(/(quem e voce|qual (e )?(o )?seu nome|se apresente)/.test(t)){say(`Eu sou ${cfg.name}, seu assistente pessoal, ${U}.`);return}
   if(/(obrigado|valeu|obrigada)/.test(t)){say('Sempre às ordens.');return}
   if(/(bom dia|boa tarde|boa noite|ola|oi)$/.test(t)){say(`Olá, ${U}. Como posso ajudar?`);return}
   if(/\b(pare|silencio|cancelar|cancela)\b/.test(t)&&t.length<25){speechSynthesis.cancel();spkId++;speaking=false;setState('idle');resume();return}
   if(/(desligar|encerrar|ate logo|tchau)/.test(t)){say('Encerrando os sistemas. Até logo.',()=>stopAll());return}
-  if(t.length>1){
-    if(aiReady()){askAI(raw);return}
-    say(`Não tenho esse comando, ${U}. Vou pesquisar na web. Para eu responder qualquer pergunta, configure uma IA na engrenagem.`);openUrl('https://www.google.com/search?q='+q(raw))}
-  else resume();
+  if(t.length>1){askAI(raw);return}
+  resume();
 }
 
 /* ---------- modo espera / aparecer ao ser chamado ---------- */
@@ -492,11 +490,22 @@ let thinking=false,hist=[];
 const PROV={
   openai:{name:'ChatGPT',key:()=>cfg.kOpenai||'',model:()=>cfg.mOpenai},
   gemini:{name:'Gemini',key:()=>cfg.kGemini||'',model:()=>cfg.mGemini},
-  grok:{name:'Grok',key:()=>cfg.kGrok||'',model:()=>cfg.mGrok}};
-const aiReady=()=>{const p=PROV[cfg.ai];return !!(p&&p.key().trim())};
+  grok:{name:'Grok',key:()=>cfg.kGrok||'',model:()=>cfg.mGrok},
+  free:{name:'Jarvis',key:()=>'free',model:()=>''}};
+const aiReady=()=>true;
+const curAI=()=>{const p=PROV[cfg.ai];return (p&&cfg.ai!=='none'&&p.key().trim())?cfg.ai:'free'};
 const sysPrompt=()=>cfg.persona.replace(/\{name\}/g,cfg.name).replace(/\{user\}/g,cfg.user);
 async function callAI(prov,msgs){
   const key=PROV[prov].key().trim(),model=PROV[prov].model().trim();
+  if(prov==='free'){
+    const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),20000);
+    try{
+      const r=await fetch('https://text.pollinations.ai/openai',{method:'POST',headers:{'Content-Type':'application/json'},signal:ctl.signal,body:JSON.stringify({model:'openai',messages:[{role:'system',content:sysPrompt()},...msgs]})});
+      if(!r.ok)throw new Error('IA grátis indisponível ('+r.status+')');
+      const j=await r.json();const t=j.choices?.[0]?.message?.content;
+      if(!t)throw new Error('sem resposta');return t;
+    }finally{clearTimeout(to)}
+  }
   if(prov==='gemini'){
     const body={systemInstruction:{parts:[{text:sysPrompt()}]},contents:msgs.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))};
     const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)});
@@ -508,13 +517,51 @@ async function callAI(prov,msgs){
   const j=await r.json();if(!r.ok)throw new Error(j.error?.message||(typeof j.error==='string'?j.error:r.status));
   return j.choices?.[0]?.message?.content||'(sem resposta)';
 }
+async function wikiAnswer(text){
+  const clean=text.replace(/^(o que [eé]|o que s[aã]o|quem [eé]|quem foi|me fale sobre|fale sobre|pesquis\w+|procur\w+)\s+/i,'').replace(/[?!.]+$/,'').trim();
+  const s=await (await fetch('https://pt.wikipedia.org/w/api.php?action=query&list=search&srlimit=1&format=json&origin=*&srsearch='+q(clean))).json();
+  const title=s.query&&s.query.search&&s.query.search[0]&&s.query.search[0].title;
+  if(!title)throw new Error('sem resultado');
+  const r=await (await fetch('https://pt.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=1&explaintext=1&redirects=1&format=json&origin=*&titles='+q(title))).json();
+  const pg=Object.values(r.query.pages)[0];
+  const txt=((pg&&pg.extract)||'').trim().split('\n')[0];
+  if(!txt)throw new Error('sem resultado');
+  return txt.length>700?txt.slice(0,700).replace(/\s+\S*$/,'')+'...':txt;
+}
+const WMO={0:'céu limpo',1:'céu quase limpo',2:'parcialmente nublado',3:'nublado',45:'neblina',48:'neblina',51:'garoa fraca',53:'garoa',55:'garoa forte',61:'chuva fraca',63:'chuva',65:'chuva forte',80:'pancadas de chuva',81:'pancadas de chuva',82:'pancadas fortes de chuva',95:'tempestade',96:'tempestade com granizo',99:'tempestade com granizo'};
+async function weather(t){
+  const U=cfg.user;
+  thinking=true;setState('thinking');pauseAll();
+  try{
+    let lat,lon,place='';
+    const mc=t.match(/\b(?:em|para|de) ([a-z ]{3,30})$/);
+    if(mc&&!/^(hoje|agora|amanha)/.test(mc[1].trim())){
+      const g=await (await fetch('https://geocoding-api.open-meteo.com/v1/search?count=1&language=pt&name='+q(mc[1].trim()))).json();
+      if(g.results&&g.results[0]){lat=g.results[0].latitude;lon=g.results[0].longitude;place=' em '+g.results[0].name}
+    }
+    if(lat==null){
+      const pos=await new Promise((ok,no)=>navigator.geolocation.getCurrentPosition(ok,no,{timeout:9000}));
+      lat=pos.coords.latitude;lon=pos.coords.longitude;
+    }
+    const w=await (await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=1`)).json();
+    const c=w.current,d=w.daily;
+    const txt=`Agora faz ${Math.round(c.temperature_2m)} graus${place}, com ${WMO[c.weather_code]||'tempo variado'}. Hoje a mínima é ${Math.round(d.temperature_2m_min[0])} e a máxima ${Math.round(d.temperature_2m_max[0])} graus, com ${d.precipitation_probability_max[0]} por cento de chance de chuva.`;
+    thinking=false;showAns(txt,'PREVISÃO DO TEMPO');say(txt);
+  }catch(e){
+    thinking=false;
+    say(`Não consegui acessar sua localização, ${U}. Diga o nome da cidade, por exemplo: previsão do tempo em São Paulo.`);
+  }
+}
 async function askAI(text){
   thinking=true;setState('thinking');pauseAll();
   hist.push({role:'user',content:text});if(hist.length>12)hist=hist.slice(-12);
+  const prov=curAI();
   try{
-    const ans=await callAI(cfg.ai,hist);
+    let ans;
+    try{ans=await callAI(prov,hist)}
+    catch(e){if(prov==='free'){ans=await wikiAnswer(text)}else throw e}
     hist.push({role:'assistant',content:ans});thinking=false;
-    showAns(ans,PROV[cfg.ai].name.toUpperCase());
+    showAns(ans,PROV[prov].name.toUpperCase());
     let spoken=ans.replace(/```[\s\S]*?```/g,' ').replace(/[*#`_>]/g,'').replace(/\s+/g,' ').trim();
     if(spoken.length>600){spoken=spoken.slice(0,600);const i=spoken.lastIndexOf('. ');if(i>200)spoken=spoken.slice(0,i+1)}
     if(/```/.test(ans))spoken=(spoken?spoken.slice(0,300)+' ':'')+'O código está na tela.';
@@ -522,7 +569,7 @@ async function askAI(text){
   }catch(e){
     thinking=false;hist.pop();
     log('Erro: '+e.message);
-    say(`Não consegui falar com o ${PROV[cfg.ai].name}. Veja a chave e o modelo na engrenagem.`);
+    say(prov==='free'?`Não consegui uma resposta agora, ${cfg.user}. Verifique a internet e tente de novo.`:`Não consegui falar com o ${PROV[prov].name}. Veja a chave e o modelo na engrenagem.`);
   }
 }
 const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');

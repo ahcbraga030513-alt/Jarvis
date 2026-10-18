@@ -25,8 +25,8 @@ button{font-family:inherit;color:var(--c);background:rgba(0,0,0,.5);border:1px s
 button:active{background:color-mix(in srgb,var(--c) 30%,transparent)}
 #gear{font-size:20px;padding:6px 12px}
 #status{position:fixed;left:0;right:0;top:62%;text-align:center;letter-spacing:.3em;font-size:13px;z-index:6;text-shadow:0 0 8px var(--c)}
-#log{position:fixed;left:16px;right:16px;top:67%;font-size:12px;line-height:1.6;color:#cfefff;z-index:6;text-align:center;font-family:system-ui,sans-serif;max-height:13%;overflow:hidden}
-#log div{opacity:.85}
+#log{position:fixed;left:16px;right:16px;top:65%;bottom:calc(env(safe-area-inset-bottom) + 142px);font-size:13px;line-height:1.6;color:#cfefff;z-index:6;text-align:left;font-family:system-ui,sans-serif;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch;padding:0 4px;scrollbar-width:thin;scrollbar-color:var(--c) transparent}
+#log div{opacity:.85;margin-bottom:6px;word-break:break-word}
 #log div:last-child{opacity:1;color:#fff}
 .lnk{display:block;color:var(--c);margin-top:6px;font-size:13px}
 #power{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 28px);z-index:6;font-size:15px;padding:14px 34px}
@@ -108,6 +108,18 @@ body:not(.awake) #clock{opacity:.8}
   <input id="s_rate" type="range" min="0.5" max="1.6" step="0.05">
   <label>Tom da voz (grave ↔ agudo): <span id="v_pitch"></span></label>
   <input id="s_pitch" type="range" min="0.3" max="1.8" step="0.05">
+  <div class="row"><button id="b_preset">ESTILO JARVIS</button><button id="b_nextv">PRÓXIMA VOZ</button></div>
+  <small id="v_name"></small>
+  <label>Voz premium (bem mais realista, usa a sua chave do ChatGPT/OpenAI)</label>
+  <select id="s_tts">
+    <option value="none">Desligada (voz do aparelho)</option>
+    <option value="onyx">Onyx (grave e firme)</option>
+    <option value="echo">Echo (masculina, calma)</option>
+    <option value="fable">Fable (sotaque britânico)</option>
+    <option value="ash">Ash (masculina, suave)</option>
+  </select>
+  <small>Precisa da chave do ChatGPT preenchida mais abaixo e de crédito na conta OpenAI. É cobrado por uso (centavos por frase). Se falhar, ele volta para a voz do aparelho.</small>
+  <small>Toque em PRÓXIMA VOZ até achar uma voz masculina que você goste. Se só tiver voz feminina, instale uma masculina em Configurações do Android → Saída de texto para voz.</small>
 
   <label>Cor do HUD</label>
   <input id="s_color" type="color">
@@ -171,8 +183,8 @@ if(NO_TTS){
   window.speechSynthesis={cancel(){},getVoices(){return[]},speak(u){setTimeout(()=>{u.onend&&u.onend()},1800)},onvoiceschanged:null};
   window.SpeechSynthesisUtterance=function(t){this.text=t};
 }
-const DEFAULT={name:'Jarvis',user:'senhor',voice:'',rate:1,pitch:0.85,color:'#00d0ff',mode:'clap',claps:1,sens:55,
- greet:'Pois não, {user}?',ai:'none',introFull:'start',kGemini:'',kOpenai:'',kGrok:'',mGemini:'gemini-2.0-flash',mOpenai:'gpt-4o-mini',mGrok:'grok-3-mini',
+const DEFAULT={name:'Jarvis',user:'senhor',voice:'',rate:0.94,pitch:0.7,color:'#00d0ff',mode:'clap',claps:1,sens:55,
+ greet:'Pois não, {user}?',ai:'none',ttsVoice:'none',introFull:'start',kGemini:'',kOpenai:'',kGrok:'',mGemini:'gemini-2.0-flash',mOpenai:'gpt-4o-mini',mGrok:'grok-3-mini',
  persona:'Você é {name}, um assistente pessoal inspirado no J.A.R.V.I.S. dos filmes dos Vingadores. Responda sempre em português do Brasil, de forma educada, elegante e com leve humor sutil. Chame o usuário de {user}. Dê respostas curtas e diretas, pois serão faladas em voz alta, a menos que peçam código ou uma explicação longa. Ao escrever código, use blocos de código com três crases.',
  custom:'modo festa => Protocolo festa iniciado, {user}. => https://www.youtube.com/results?search_query=musica+para+festa'};
 let cfg=Object.assign({},DEFAULT,JSON.parse(localStorage.getItem('jarvis_cfg')||'{}'));
@@ -183,22 +195,51 @@ const norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').tr
 let active=false,busy=false,speaking=false,spkId=0,state='off';
 const STATUS={off:'OFFLINE',idle:'EM ESPERA',listening:'OUVINDO...',speaking:'RESPONDENDO',thinking:'PENSANDO...'};
 function setState(s){state=s;$('status').textContent=STATUS[s]||s}
-function log(t){const d=document.createElement('div');d.textContent=t;const L=$('log');L.appendChild(d);while(L.children.length>5)L.removeChild(L.firstChild)}
+function log(t){const d=document.createElement('div');d.textContent=t;const L=$('log');L.appendChild(d);while(L.children.length>200)L.removeChild(L.firstChild);L.scrollTop=L.scrollHeight}
 function greet(){return cfg.greet.replace('{user}',cfg.user)}
 function openUrl(u){const w=window.open(u,'_blank');if(!w){const a=document.createElement('a');a.href=u;a.target='_blank';a.className='lnk';a.textContent='▶ Toque para abrir: '+u.replace(/^https?:\/\//,'').slice(0,40);$('log').appendChild(a)}}
 
 /* ---------- voz (fala) ---------- */
+let audioEl=null;
+function stopAudio(){if(audioEl){try{audioEl.pause()}catch(e){}audioEl=null}}
+function speakBrowser(text,id,done){
+  const parts=(text.match(/[^.!?]+[.!?]*/g)||[text]).map(x=>x.trim()).filter(Boolean);
+  const v=speechSynthesis.getVoices().find(v=>v.name===cfg.voice);
+  let i=0;
+  const next=()=>{
+    if(id!==spkId)return;
+    if(i>=parts.length){done();return}
+    const u=new SpeechSynthesisUtterance(parts[i++]);u.lang='pt-BR';
+    if(v){u.voice=v;u.lang=v.lang}
+    u.rate=cfg.rate;u.pitch=cfg.pitch;
+    const adv=()=>setTimeout(next,i<parts.length?280:0);
+    u.onend=adv;u.onerror=adv;
+    speechSynthesis.speak(u);
+  };
+  next();
+}
+async function speakPremium(text,id,done){
+  try{
+    const r=await fetch('https://api.openai.com/v1/audio/speech',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.kOpenai.trim()},body:JSON.stringify({model:'gpt-4o-mini-tts',voice:cfg.ttsVoice,input:text,instructions:'Fale em português do Brasil com voz grave, calma, elegante e precisa, como um mordomo digital britânico e educado. Ritmo pausado e confiante, sem exagerar na emoção.',response_format:'mp3'})});
+    if(!r.ok)throw new Error(r.status);
+    const blob=await r.blob();
+    if(id!==spkId)return;
+    const a=new Audio(URL.createObjectURL(blob));audioEl=a;
+    a.onended=done;a.onerror=done;
+    await a.play();
+  }catch(e){
+    if(id!==spkId)return;
+    log('Voz premium falhou ('+(e.message||e)+'). Usando a voz do aparelho.');
+    speakBrowser(text,id,done);
+  }
+}
 function say(text,cb){
   log(cfg.name+': '+text);wakeUp();
-  pauseAll();speechSynthesis.cancel();
+  pauseAll();speechSynthesis.cancel();stopAudio();
   const id=++spkId;speaking=true;setState('speaking');
-  const u=new SpeechSynthesisUtterance(text);u.lang='pt-BR';
-  const v=speechSynthesis.getVoices().find(v=>v.name===cfg.voice);
-  if(v){u.voice=v;u.lang=v.lang}
-  u.rate=cfg.rate;u.pitch=cfg.pitch;
   const done=()=>{if(id!==spkId)return;speaking=false;setState(active?'idle':'off');cb?cb():resume()};
-  u.onend=done;u.onerror=done;
-  speechSynthesis.speak(u);
+  if(cfg.ttsVoice&&cfg.ttsVoice!=='none'&&(cfg.kOpenai||'').trim())speakPremium(text,id,done);
+  else speakBrowser(text,id,done);
 }
 
 /* ---------- reconhecimento de voz ---------- */
@@ -336,7 +377,7 @@ function handle(raw){
   if(/(quem e voce|qual (e )?(o )?seu nome|se apresente)/.test(t)){say(`Eu sou ${cfg.name}, seu assistente pessoal, ${U}.`);return}
   if(/(obrigado|valeu|obrigada)/.test(t)){say('Sempre às ordens.');return}
   if(/(bom dia|boa tarde|boa noite|ola|oi)$/.test(t)){say(`Olá, ${U}. Como posso ajudar?`);return}
-  if(/\b(pare|silencio|cancelar|cancela)\b/.test(t)&&t.length<25){speechSynthesis.cancel();spkId++;speaking=false;setState('idle');resume();return}
+  if(/\b(pare|silencio|cancelar|cancela)\b/.test(t)&&t.length<25){speechSynthesis.cancel();stopAudio();spkId++;speaking=false;setState('idle');resume();return}
   if(/(desligar|encerrar|ate logo|tchau)/.test(t)){say('Encerrando os sistemas. Até logo.',()=>stopAll());return}
   if(t.length>1){askAI(raw);return}
   resume();
@@ -596,7 +637,7 @@ async function startAll(){
   playIntro(()=>say(`${g}, ${cfg.user}. Todos os sistemas estão online e operando normalmente. ${cfg.mode==='clap'?'Bata palmas quando precisar de mim.':'Chame meu nome quando precisar de mim.'}`));
 }
 function stopAll(){
-  active=false;pauseAll();speechSynthesis.cancel();spkId++;speaking=false;busy=false;awaiting=false;
+  active=false;pauseAll();speechSynthesis.cancel();stopAudio();spkId++;speaking=false;busy=false;awaiting=false;
   if(wake){try{wake.release()}catch(e){}wake=null}
   $('power').textContent='INICIAR';setState('off');
 }
@@ -616,13 +657,13 @@ function applyCfg(){
   $('s_name').value=cfg.name;$('s_user').value=cfg.user;$('s_rate').value=cfg.rate;$('s_pitch').value=cfg.pitch;
   $('s_color').value=cfg.color;$('s_mode').value=cfg.mode;$('s_claps').value=cfg.claps;$('s_sens').value=cfg.sens;
   $('s_greet').value=cfg.greet;$('s_custom').value=cfg.custom;
-  $('s_ai').value=cfg.ai;$('s_kGemini').value=cfg.kGemini;$('s_mGemini').value=cfg.mGemini;$('s_kOpenai').value=cfg.kOpenai;$('s_mOpenai').value=cfg.mOpenai;$('s_kGrok').value=cfg.kGrok;$('s_mGrok').value=cfg.mGrok;$('s_persona').value=cfg.persona;$('s_intro').value=cfg.introFull;
-  $('v_rate').textContent=(+cfg.rate).toFixed(2);$('v_pitch').textContent=(+cfg.pitch).toFixed(2);$('v_sens').textContent=cfg.sens;
+  $('s_ai').value=cfg.ai;$('s_kGemini').value=cfg.kGemini;$('s_mGemini').value=cfg.mGemini;$('s_kOpenai').value=cfg.kOpenai;$('s_mOpenai').value=cfg.mOpenai;$('s_kGrok').value=cfg.kGrok;$('s_mGrok').value=cfg.mGrok;$('s_persona').value=cfg.persona;$('s_tts').value=cfg.ttsVoice;$('s_intro').value=cfg.introFull;
+  $('v_name').textContent='Voz atual: '+(cfg.voice||'padrão do aparelho');$('v_rate').textContent=(+cfg.rate).toFixed(2);$('v_pitch').textContent=(+cfg.pitch).toFixed(2);$('v_sens').textContent=cfg.sens;
 }
 const bind=(id,key,conv=x=>x,after)=>$(id).addEventListener('input',()=>{cfg[key]=conv($(id).value);save();applyCfg();after&&after()});
 bind('s_name','name',v=>v.trim()||'Jarvis');bind('s_user','user',v=>v.trim()||'senhor');
 bind('s_voice','voice');bind('s_rate','rate',Number);bind('s_pitch','pitch',Number);bind('s_color','color');
-bind('s_ai','ai');bind('s_intro','introFull');bind('s_persona','persona');
+bind('s_ai','ai');bind('s_tts','ttsVoice');bind('s_intro','introFull');bind('s_persona','persona');
 bind('s_kGemini','kGemini',v=>v.trim());bind('s_mGemini','mGemini',v=>v.trim());
 bind('s_kOpenai','kOpenai',v=>v.trim());bind('s_mOpenai','mOpenai',v=>v.trim());
 bind('s_kGrok','kGrok',v=>v.trim());bind('s_mGrok','mGrok',v=>v.trim());
@@ -630,7 +671,22 @@ bind('s_claps','claps',Number);bind('s_sens','sens',Number);bind('s_greet','gree
 bind('s_mode','mode',x=>x,()=>{if(active){pauseAll();resume()}});
 $('gear').onclick=()=>$('panel').classList.add('open');
 $('b_close').onclick=()=>$('panel').classList.remove('open');
-$('b_test').onclick=()=>{const a=active;active=false;say(`Olá ${cfg.user}, eu sou ${cfg.name}. Esta é a minha voz.`,()=>{active=a})};
+function testVoice(){const a=active;active=false;say(`Olá ${cfg.user}, eu sou ${cfg.name}. Todos os sistemas estão online.`,()=>{active=a})}
+$('b_test').onclick=testVoice;
+const ptVoices=()=>speechSynthesis.getVoices().filter(v=>/^pt/i.test(v.lang));
+const MALE=/(male|masc|ricardo|daniel|felipe|ant[oô]nio|luciano|jorge|thiago|cristiano|paulo|marcos|google.*pt)/i;
+$('b_preset').onclick=()=>{
+  cfg.rate=0.92;cfg.pitch=0.7;
+  const v=ptVoices().find(v=>/(male|masc|ricardo|daniel|felipe|ant[oô]nio|luciano|jorge|thiago|cristiano|paulo|marcos)/i.test(v.name)&&!/female|fem/i.test(v.name));
+  if(v)cfg.voice=v.name;
+  save();applyCfg();fillVoices();testVoice();
+};
+$('b_nextv').onclick=()=>{
+  const l=ptVoices();
+  if(!l.length){say('Não encontrei vozes em português neste aparelho.');return}
+  const i=(l.findIndex(v=>v.name===cfg.voice)+1)%l.length;
+  cfg.voice=l[i].name;save();applyCfg();fillVoices();testVoice();
+};
 $('b_reset').onclick=()=>{if(confirm('Restaurar configurações padrão?')){cfg=Object.assign({},DEFAULT);save();applyCfg();fillVoices()}};
 
 /* ---------- HUD (canvas) ---------- */

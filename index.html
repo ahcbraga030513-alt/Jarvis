@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>JARVIS</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--c:#00d0ff}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:#000;color:var(--c);font-family:'Orbitron',monospace;overflow:hidden}
+body{background:radial-gradient(ellipse at 50% 40%,#04141c 0%,#000 70%)}
+body:before{content:"";position:fixed;inset:0;background:
+ linear-gradient(rgba(255,255,255,.02) 1px,transparent 1px) 0 0/100% 4px;pointer-events:none;z-index:5}
+canvas{position:fixed;inset:0;width:100%;height:100%}
+#top{position:fixed;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top) + 14px) 18px 0;display:flex;justify-content:space-between;align-items:center;z-index:6}
+#title{font-weight:700;letter-spacing:.35em;font-size:18px;text-shadow:0 0 12px var(--c)}
+button{font-family:inherit;color:var(--c);background:rgba(0,0,0,.5);border:1px solid var(--c);border-radius:6px;padding:10px 16px;letter-spacing:.15em;box-shadow:0 0 10px color-mix(in srgb,var(--c) 40%,transparent)}
+button:active{background:color-mix(in srgb,var(--c) 30%,transparent)}
+#gear{font-size:20px;padding:6px 12px}
+#status{position:fixed;left:0;right:0;top:62%;text-align:center;letter-spacing:.3em;font-size:13px;z-index:6;text-shadow:0 0 8px var(--c)}
+#log{position:fixed;left:16px;right:16px;top:67%;font-size:12px;line-height:1.6;color:#cfefff;z-index:6;text-align:center;font-family:system-ui,sans-serif;max-height:13%;overflow:hidden}
+#log div{opacity:.85}
+#log div:last-child{opacity:1;color:#fff}
+.lnk{display:block;color:var(--c);margin-top:6px;font-size:13px}
+#power{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 28px);z-index:6;font-size:15px;padding:14px 34px}
+#panel{position:fixed;left:0;right:0;bottom:0;max-height:82vh;overflow:auto;background:rgba(2,12,18,.97);border-top:1px solid var(--c);z-index:20;padding:18px 18px calc(env(safe-area-inset-bottom) + 24px);transform:translateY(105%);transition:transform .3s;font-family:system-ui,sans-serif;color:#dff6ff}
+#panel.open{transform:none}
+#panel h3{font-family:'Orbitron';margin:0 0 12px;font-size:14px;letter-spacing:.25em;color:var(--c)}
+label{display:block;font-size:12px;margin:12px 0 4px;color:#8fc9dc}
+input,select,textarea{width:100%;background:#031c26;color:#fff;border:1px solid #1d5870;border-radius:6px;padding:10px;font-size:15px;font-family:inherit}
+input[type=range]{padding:0}
+input[type=color]{height:44px;padding:2px}
+textarea{min-height:90px}
+small{color:#6ea3b6;display:block;margin-top:4px;line-height:1.4}
+.row{display:flex;gap:10px;margin-top:16px}
+.row button{flex:1}
+#bar{position:fixed;left:14px;right:14px;bottom:calc(env(safe-area-inset-bottom) + 84px);display:flex;gap:8px;z-index:6}
+#bar input{flex:1;background:rgba(0,0,0,.6);border:1px solid var(--c);color:#fff;border-radius:6px;padding:12px;font-size:15px;font-family:system-ui,sans-serif}
+#bar button{padding:10px 14px}
+#ans{position:fixed;left:0;right:0;bottom:0;max-height:70vh;overflow:auto;background:rgba(2,12,18,.97);border-top:1px solid var(--c);z-index:18;padding:14px 16px calc(env(safe-area-inset-bottom) + 20px);transform:translateY(105%);transition:transform .3s;font-family:system-ui,sans-serif;color:#dff6ff;font-size:15px;line-height:1.5}
+#ans.open{transform:none}
+#ans_head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-family:'Orbitron';font-size:12px;letter-spacing:.2em;color:var(--c)}
+#ans_head button{padding:6px 12px;font-size:11px}
+#ans p{margin:8px 0}
+.code{position:relative;background:#021017;border:1px solid #1d5870;border-radius:6px;margin:10px 0}
+.code pre{margin:0;padding:26px 12px 12px;overflow:auto;font-size:12.5px;color:#9fffd0}
+.cp{position:absolute;top:4px;right:4px;padding:3px 8px;font-size:10px}
+#hud{transition:opacity .6s,transform .6s}
+#status,#log,#bar{transition:opacity .5s}
+body:not(.awake) #hud{opacity:.15;transform:scale(.85)}
+body:not(.awake) #status,body:not(.awake) #log,body:not(.awake) #bar{opacity:0;pointer-events:none}
+#clock{position:fixed;left:0;right:0;top:36%;transform:translateY(-50%);text-align:center;font-size:44px;letter-spacing:.2em;opacity:0;transition:opacity .6s;z-index:4;text-shadow:0 0 14px var(--c);pointer-events:none}
+body:not(.awake) #clock{opacity:.8}
+#b3d{font-size:13px;padding:7px 12px}
+#boot{position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:15;display:flex;flex-direction:column;justify-content:center;padding:0 10%;font-size:13px;letter-spacing:.15em;line-height:2.2;opacity:0;pointer-events:none;transition:opacity .6s}
+#boot.on{opacity:1}
+#d3{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 45%,#04141c 0%,#000 75%);z-index:12;display:none}
+#d3.open{display:block}
+#d3_cv{width:100%;height:100%;display:block}
+#d3_box{position:absolute;left:12px;bottom:calc(env(safe-area-inset-bottom) + 12px);width:132px;height:99px;border:1px solid var(--c);border-radius:6px;overflow:hidden}
+#d3_vid{width:100%;height:100%;object-fit:fill;transform:scaleX(-1);opacity:.6}
+#d3_hand{position:absolute;inset:0;width:100%;height:100%}
+#d3_name{position:absolute;top:calc(env(safe-area-inset-top) + 18px);left:0;right:0;text-align:center;letter-spacing:.35em;font-size:16px;text-shadow:0 0 10px var(--c)}
+#d3_msg{position:absolute;top:45%;left:0;right:0;text-align:center;font-size:12px;letter-spacing:.2em;padding:0 16px;line-height:1.8}
+#d3_hint{position:absolute;right:12px;bottom:calc(env(safe-area-inset-bottom) + 14px);width:calc(100% - 170px);font-size:10px;letter-spacing:.08em;line-height:1.7;text-align:right;color:#9fd8ea;font-family:system-ui,sans-serif}
+#d3_close{position:absolute;top:calc(env(safe-area-inset-top) + 12px);right:14px;padding:6px 12px;font-size:11px}
+</style>
+</head>
+<body class="awake">
+<canvas id="hud"></canvas>
+<div id="clock"></div>
+<div id="boot"></div>
+<div id="d3">
+  <canvas id="d3_cv"></canvas>
+  <div id="d3_box"><video id="d3_vid" playsinline muted autoplay></video><canvas id="d3_hand" width="132" height="99"></canvas></div>
+  <div id="d3_name">REATOR</div>
+  <div id="d3_msg"></div>
+  <div id="d3_hint">MÃO ABERTA: GIRA<br>DUAS MÃOS: TAMANHO<br>PINÇA: TROCA O MODELO</div>
+  <button id="d3_close">FECHAR</button>
+</div>
+<div id="top"><span id="title">JARVIS</span><span><button id="b3d">3D</button> <button id="gear">⚙</button></span></div>
+<div id="status">OFFLINE</div>
+<div id="log"></div>
+<div id="bar"><input id="txt" placeholder="Escreva um comando ou pergunta..." autocomplete="off"><button id="b_send">▶</button></div>
+<button id="power">INICIAR</button>
+
+<div id="ans"><div id="ans_head"><span id="ans_who">IA</span><button id="ans_close">FECHAR</button></div><div id="ans_body"></div></div>
+
+<div id="panel">
+  <h3>CONFIGURAÇÕES</h3>
+
+  <label>Nome do assistente (também é a palavra de ativação)</label>
+  <input id="s_name">
+
+  <label>Como ele deve te chamar</label>
+  <input id="s_user">
+
+  <label>Voz</label>
+  <select id="s_voice"></select>
+  <label>Velocidade da voz: <span id="v_rate"></span></label>
+  <input id="s_rate" type="range" min="0.5" max="1.6" step="0.05">
+  <label>Tom da voz (grave ↔ agudo): <span id="v_pitch"></span></label>
+  <input id="s_pitch" type="range" min="0.3" max="1.8" step="0.05">
+
+  <label>Cor do HUD</label>
+  <input id="s_color" type="color">
+
+  <label>Modo de ativação</label>
+  <select id="s_mode">
+    <option value="clap">Palmas</option>
+    <option value="wake">Falar o nome (sempre ouvindo)</option>
+    <option value="both">Os dois (pode falhar em alguns celulares)</option>
+  </select>
+  <label>Quantidade de palmas</label>
+  <select id="s_claps"><option value="1">1 palma</option><option value="2">2 palmas</option></select>
+  <label>Sensibilidade da palma: <span id="v_sens"></span></label>
+  <input id="s_sens" type="range" min="10" max="95" step="1">
+
+  <label>Frase ao ser chamado (use {user} para seu apelido)</label>
+  <input id="s_greet">
+
+  <label>Abertura (som + animação)</label>
+  <select id="s_intro">
+    <option value="start">Só ao iniciar</option>
+    <option value="always">Toda vez que eu chamar</option>
+    <option value="never">Nunca</option>
+  </select>
+
+  <h3 style="margin-top:26px">INTELIGÊNCIA (IA)</h3>
+  <label>IA padrão (responde o que não for comando)</label>
+  <select id="s_ai">
+    <option value="none">Nenhuma</option>
+    <option value="gemini">Gemini (Google)</option>
+    <option value="openai">ChatGPT (OpenAI)</option>
+    <option value="grok">Grok (xAI)</option>
+  </select>
+  <small>Diga "usar Gemini", "usar ChatGPT" ou "usar Grok" para trocar na hora. As chaves ficam só neste celular.</small>
+  <label>Chave de API do Gemini</label><input id="s_kGemini" type="password" autocomplete="off">
+  <label>Modelo do Gemini</label><input id="s_mGemini">
+  <label>Chave de API do ChatGPT</label><input id="s_kOpenai" type="password" autocomplete="off">
+  <label>Modelo do ChatGPT</label><input id="s_mOpenai">
+  <label>Chave de API do Grok</label><input id="s_kGrok" type="password" autocomplete="off">
+  <label>Modelo do Grok</label><input id="s_mGrok">
+  <small>Se der erro de modelo, troque o nome do modelo pelo que está disponível na sua conta.</small>
+  <label>Personalidade da IA (use {name} e {user})</label>
+  <textarea id="s_persona" style="min-height:130px"></textarea>
+
+  <label style="margin-top:22px">Seus comandos personalizados</label>
+  <textarea id="s_custom" placeholder="gatilho => resposta => link (opcional)"></textarea>
+  <small>Um por linha, no formato: <b>gatilho => resposta => link</b><br>Ex.: <i>modo festa => Protocolo festa iniciado. => https://youtube.com</i></small>
+
+  <div class="row">
+    <button id="b_test">TESTAR VOZ</button>
+    <button id="b_reset">RESTAURAR</button>
+    <button id="b_close">FECHAR</button>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+/* proteção: navegadores sem síntese de voz não quebram a página */
+const NO_TTS=!('speechSynthesis' in window)||typeof SpeechSynthesisUtterance==='undefined';
+if(NO_TTS){
+  window.speechSynthesis={cancel(){},getVoices(){return[]},speak(u){setTimeout(()=>{u.onend&&u.onend()},1800)},onvoiceschanged:null};
+  window.SpeechSynthesisUtterance=function(t){this.text=t};
+}
+const DEFAULT={name:'Jarvis',user:'senhor',voice:'',rate:1,pitch:0.85,color:'#00d0ff',mode:'clap',claps:1,sens:55,
+ greet:'Pois não, {user}?',ai:'none',introFull:'start',kGemini:'',kOpenai:'',kGrok:'',mGemini:'gemini-2.0-flash',mOpenai:'gpt-4o-mini',mGrok:'grok-3-mini',
+ persona:'Você é {name}, um assistente pessoal inspirado no J.A.R.V.I.S. dos filmes dos Vingadores. Responda sempre em português do Brasil, de forma educada, elegante e com leve humor sutil. Chame o usuário de {user}. Dê respostas curtas e diretas, pois serão faladas em voz alta, a menos que peçam código ou uma explicação longa. Ao escrever código, use blocos de código com três crases.',
+ custom:'modo festa => Protocolo festa iniciado, {user}. => https://www.youtube.com/results?search_query=musica+para+festa'};
+let cfg=Object.assign({},DEFAULT,JSON.parse(localStorage.getItem('jarvis_cfg')||'{}'));
+const save=()=>localStorage.setItem('jarvis_cfg',JSON.stringify(cfg));
+const norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+
+/* ---------- estado ---------- */
+let active=false,busy=false,speaking=false,spkId=0,state='off';
+const STATUS={off:'OFFLINE',idle:'EM ESPERA',listening:'OUVINDO...',speaking:'RESPONDENDO',thinking:'PENSANDO...'};
+function setState(s){state=s;$('status').textContent=STATUS[s]||s}
+function log(t){const d=document.createElement('div');d.textContent=t;const L=$('log');L.appendChild(d);while(L.children.length>5)L.removeChild(L.firstChild)}
+function greet(){return cfg.greet.replace('{user}',cfg.user)}
+function openUrl(u){const w=window.open(u,'_blank');if(!w){const a=document.createElement('a');a.href=u;a.target='_blank';a.className='lnk';a.textContent='▶ Toque para abrir: '+u.replace(/^https?:\/\//,'').slice(0,40);$('log').appendChild(a)}}
+
+/* ---------- voz (fala) ---------- */
+function say(text,cb){
+  log(cfg.name+': '+text);wakeUp();
+  pauseAll();speechSynthesis.cancel();
+  const id=++spkId;speaking=true;setState('speaking');
+  const u=new SpeechSynthesisUtterance(text);u.lang='pt-BR';
+  const v=speechSynthesis.getVoices().find(v=>v.name===cfg.voice);
+  if(v){u.voice=v;u.lang=v.lang}
+  u.rate=cfg.rate;u.pitch=cfg.pitch;
+  const done=()=>{if(id!==spkId)return;speaking=false;setState(active?'idle':'off');cb?cb():resume()};
+  u.onend=done;u.onerror=done;
+  speechSynthesis.speak(u);
+}
+
+/* ---------- reconhecimento de voz ---------- */
+function mkRec(cont){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR)return null;
+  const r=new SR();r.lang='pt-BR';r.continuous=cont;r.interimResults=false;r.maxAlternatives=1;return r;
+}
+function listenOnce(cb){
+  stopWake();
+  const r=mkRec(false);
+  if(!r){say('Este navegador não suporta reconhecimento de voz. Use o Chrome.');return}
+  busy=true;setState('listening');let got=false;
+  r.onresult=e=>{got=true;const txt=e.results[0][0].transcript;log('Você: '+txt);cb(txt)};
+  r.onerror=()=>{};
+  r.onend=()=>{busy=false;if(!got&&!speaking)setState('idle');if(!speaking)resume()};
+  try{r.start()}catch(e){busy=false}
+  setTimeout(()=>{try{r.stop()}catch(e){}},9000);
+}
+let wakeRec=null,awaiting=false;
+function startWake(){
+  const r=mkRec(true);if(!r)return;wakeRec=r;
+  r.onresult=e=>{
+    const txt=e.results[e.results.length-1][0].transcript;const n=norm(txt);
+    if(awaiting){awaiting=false;log('Você: '+txt);handle(txt);return}
+    const nm=norm(cfg.name);
+    if(n.includes(nm)){
+      const rest=n.replace(nm,'').replace(/^[,\s]+/,'').trim();
+      log('Você: '+txt);
+      if(rest.length>1)handle(rest);else{awaiting=true;say(greet())}
+    }
+  };
+  r.onerror=e=>{if(e.error==='not-allowed')log('Permita o uso do microfone.')};
+  r.onend=()=>{wakeRec=null;if(active&&!busy&&!speaking&&cfg.mode!=='clap')setTimeout(resume,300)};
+  try{r.start()}catch(e){wakeRec=null}
+}
+function stopWake(){if(wakeRec){const r=wakeRec;wakeRec=null;r.onend=null;try{r.abort()}catch(e){}}}
+
+/* ---------- detecção de palma ---------- */
+let clapOn=false,clapStream=null,actx=null,clapTimer=null,lastClap=0,clapCount=0,prev=0,micLevel=0;
+async function startClap(){
+  if(clapOn)return;clapOn=true;
+  let st;
+  try{st=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})}
+  catch(e){clapOn=false;log('Microfone negado. Libere nas permissões do site.');return}
+  if(!clapOn){st.getTracks().forEach(t=>t.stop());return}
+  clapStream=st;
+  actx=new(window.AudioContext||window.webkitAudioContext)();
+  const src=actx.createMediaStreamSource(st),an=actx.createAnalyser();an.fftSize=1024;src.connect(an);
+  const buf=new Uint8Array(an.fftSize);
+  clapTimer=setInterval(()=>{
+    an.getByteTimeDomainData(buf);
+    let pk=0;for(let i=0;i<buf.length;i++){const a=Math.abs(buf[i]-128)/128;if(a>pk)pk=a}
+    micLevel=micLevel*0.8+pk*0.2;
+    const thr=1-cfg.sens*0.0085;const now=performance.now();
+    if(pk>thr&&prev<thr*0.6&&now-lastClap>120){
+      if(clapCount>=1&&now-lastClap<900)clapCount++;else clapCount=1;
+      lastClap=now;
+      if(clapCount>=cfg.claps){clapCount=0;onClap()}
+    }
+    prev=pk;
+  },20);
+}
+function stopClap(){
+  clapOn=false;clearInterval(clapTimer);clapTimer=null;micLevel=0;
+  if(clapStream){clapStream.getTracks().forEach(t=>t.stop());clapStream=null}
+  if(actx){try{actx.close()}catch(e){}actx=null}
+}
+function onClap(){
+  pauseAll();
+  try{const a=new(window.AudioContext||window.webkitAudioContext)();const o=a.createOscillator(),g=a.createGain();o.frequency.value=880;g.gain.value=.1;o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+.12)}catch(e){}
+  wakeUp();
+  if(cfg.introFull==='always')playIntro(()=>say(greet(),()=>listenOnce(handle)));
+  else say(greet(),()=>listenOnce(handle));
+}
+function pauseAll(){stopClap();stopWake()}
+function resume(){
+  if(!active||busy||speaking||thinking)return;
+  const m=cfg.mode;
+  if((m==='clap'||m==='both')&&!clapOn)startClap();
+  if((m==='wake'||m==='both')&&!wakeRec)startWake();
+  setState('idle');
+}
+
+/* ---------- comandos ---------- */
+const APPS={youtube:'https://www.youtube.com',google:'https://www.google.com',whatsapp:'https://wa.me/',instagram:'https://www.instagram.com',spotify:'https://open.spotify.com',gmail:'https://mail.google.com',maps:'https://maps.google.com',mapa:'https://maps.google.com',netflix:'https://www.netflix.com',facebook:'https://www.facebook.com',tiktok:'https://www.tiktok.com',telegram:'https://web.telegram.org',twitter:'https://x.com'};
+const CORES={azul:'#00d0ff',vermelho:'#ff2a2a',verde:'#2aff6a',laranja:'#ff8a00',roxo:'#b04dff',dourado:'#ffc933',rosa:'#ff4fb8',branco:'#ffffff'};
+const PIADAS=['Por que o computador foi ao médico? Porque estava com um vírus.','Sabe por que o programador confunde Halloween com Natal? Porque 31 de outubro é igual a 25 de dezembro.','Eu contaria uma piada sobre UDP, mas não tenho certeza se você receberia.','Dizem que sou muito sério. Mas eu tenho bom humor, só falta atualizar.'];
+const q=s=>encodeURIComponent(s);
+
+function handle(raw){
+  let t=norm(raw);
+  const nm=norm(cfg.name);
+  t=t.replace(new RegExp('^(ei |oi |ola )?'+nm+'[,\\s]*'),'').trim();
+  const U=cfg.user;
+  // personalizados
+  for(const line of cfg.custom.split('\n')){
+    const p=line.split('=>').map(s=>s.trim());
+    if(p.length>=2&&p[0]&&t.includes(norm(p[0]))){say(p[1].replace('{user}',U));if(p[2])openUrl(p[2]);return}
+  }
+  let m;
+  if((m=t.match(/(?:usar|use|usa|trocar para|mudar para) (?:o |a )?(gemini|chat ?gpt|gpt|openai|grok)/))){
+    const k=m[1]==='gemini'?'gemini':m[1]==='grok'?'grok':'openai';
+    if(!PROV[k].key().trim()){say(`Falta a chave de API do ${PROV[k].name}. Configure na engrenagem.`);return}
+    cfg.ai=k;save();applyCfg();say(`Certo, ${U}. Agora estou usando o ${PROV[k].name}.`);return}
+  if(/(limpar|apagar|esquecer) (a )?(conversa|memoria)/.test(t)){hist=[];say('Conversa reiniciada.');return}
+  if(/(fechar|sair d[oe]|encerrar) (o )?(3d|holograma|modo 3d|modelo)/.test(t)){close3D();say('Holograma encerrado.');return}
+  if(/(proximo|trocar|outro|mudar) (o )?modelo/.test(t)){if(!d3.on){say('Abra o modo 3D primeiro.');return}setModel((d3.idx+1)%d3.models.length);say('Modelo trocado.');return}
+  if(/(modo 3d|abrir (o )?3d|holograma|modelo 3d|mostrar modelo)/.test(t)){say(`Ativando o holograma, ${U}. Mostre a mão para a câmera.`,()=>{open3D();resume()});return}
+  if(/(que horas|horas sao|hora atual|me diga as horas)/.test(t)){const d=new Date();say(`São ${d.getHours()} e ${String(d.getMinutes()).padStart(2,'0')}, ${U}.`);return}
+  if(/(que dia|data de hoje|dia e hoje|qual a data)/.test(t)){say('Hoje é '+new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+'.');return}
+  if(/bateria/.test(t)){
+    if(navigator.getBattery)navigator.getBattery().then(b=>say(`A bateria está em ${Math.round(b.level*100)} por cento${b.charging?', carregando':''}.`));
+    else say('Não consigo acessar a bateria neste navegador.');return}
+  if((m=t.match(/mudar (?:o )?nome para (.+)/))){cfg.name=raw.match(/para (.+)/i)[1].trim();save();applyCfg();say(`Certo, ${U}. Agora me chamo ${cfg.name}.`);return}
+  if((m=t.match(/(?:mudar|trocar|muda) (?:a )?cor para (\w+)/))){const c=CORES[m[1]];if(c){cfg.color=c;save();applyCfg();say('Cor alterada.')}else say('Não conheço essa cor.');return}
+  if(/voz mais rapida|fale mais rapido/.test(t)){cfg.rate=Math.min(1.6,cfg.rate+.15);save();applyCfg();say('Falando mais rápido.');return}
+  if(/voz mais lenta|fale mais devagar/.test(t)){cfg.rate=Math.max(.5,cfg.rate-.15);save();applyCfg();say('Falando mais devagar.');return}
+  if(/voz mais grave/.test(t)){cfg.pitch=Math.max(.3,cfg.pitch-.15);save();applyCfg();say('Tom mais grave.');return}
+  if(/voz mais aguda/.test(t)){cfg.pitch=Math.min(1.8,cfg.pitch+.15);save();applyCfg();say('Tom mais agudo.');return}
+  if(/(timer|temporizador|me avise|daqui a)/.test(t)&&(m=t.match(/(\d+)\s*(segundo|minuto|hora)/))){
+    const n=+m[1],mult={segundo:1,minuto:60,hora:3600}[m[2]];
+    setTimeout(()=>say(`${U}, seu temporizador de ${n} ${m[2]}${n>1?'s':''} terminou.`),n*mult*1000);
+    say(`Temporizador de ${n} ${m[2]}${n>1?'s':''} iniciado.`);return}
+  if(/(quanto e|calcule|calcular)/.test(t)||/\d\s*(mais|menos|vezes|x|dividido|\+|\*|\/)\s*\d/.test(t)){
+    let e=t.replace(/dividido por/g,'/').replace(/mais/g,'+').replace(/menos/g,'-').replace(/vezes|\bx\b/g,'*').replace(/virgula/g,'.').replace(/,/g,'.');
+    const mm=e.match(/[\d.]+(?:\s*[-+*/]\s*[\d.]+)+/);
+    if(mm&&/^[\d\s+\-*/.]+$/.test(mm[0])){try{const r=Function('"use strict";return ('+mm[0]+')')();say(`O resultado é ${Math.round(r*10000)/10000}.`);return}catch(e){}}}
+  if((m=t.match(/(?:abrir|abra|abre) (?:o |a )?(\w+)/))&&APPS[m[1]]){say(`Abrindo ${m[1]}.`);openUrl(APPS[m[1]]);return}
+  if((m=t.match(/^(?:por favor )?(?:tocar|toque|toca|coloque|colocar) (.+)/))){say(`Procurando ${m[1]} no YouTube.`);openUrl('https://www.youtube.com/results?search_query='+q(m[1]));return}
+  if((m=t.match(/^(?:por favor )?(?:pesquisar|pesquise|procure|procurar|busque) (?:por |sobre )?(.+)/))){say(`Pesquisando ${m[1]}.`);openUrl('https://www.google.com/search?q='+q(m[1]));return}
+  if((m=t.match(/(?:rota para|ir para|como chegar em|navegar para) (.+)/))){say(`Traçando rota para ${m[1]}.`);openUrl('https://www.google.com/maps/dir/?api=1&destination='+q(m[1]));return}
+  if(/(previsao do tempo|vai chover|clima hoje|como esta o clima)/.test(t)){say('Verificando a previsão do tempo.');openUrl('https://www.google.com/search?q='+q('previsão do tempo'));return}
+  if(/piada/.test(t)){say(PIADAS[Math.floor(Math.random()*PIADAS.length)]);return}
+  if(/(quem e voce|qual (e )?(o )?seu nome|se apresente)/.test(t)){say(`Eu sou ${cfg.name}, seu assistente pessoal, ${U}.`);return}
+  if(/(obrigado|valeu|obrigada)/.test(t)){say('Sempre às ordens.');return}
+  if(/(bom dia|boa tarde|boa noite|ola|oi)$/.test(t)){say(`Olá, ${U}. Como posso ajudar?`);return}
+  if(/\b(pare|silencio|cancelar|cancela)\b/.test(t)&&t.length<25){speechSynthesis.cancel();spkId++;speaking=false;setState('idle');resume();return}
+  if(/(desligar|encerrar|ate logo|tchau)/.test(t)){say('Encerrando os sistemas. Até logo.',()=>stopAll());return}
+  if(t.length>1){
+    if(aiReady()){askAI(raw);return}
+    say(`Não tenho esse comando, ${U}. Vou pesquisar na web. Para eu responder qualquer pergunta, configure uma IA na engrenagem.`);openUrl('https://www.google.com/search?q='+q(raw))}
+  else resume();
+}
+
+/* ---------- modo espera / aparecer ao ser chamado ---------- */
+let sleepT=null;
+function wakeUp(){document.body.classList.add('awake');clearTimeout(sleepT);sleepT=setTimeout(trySleep,30000)}
+function trySleep(){
+  if(!active)return;
+  if(speaking||thinking||busy||d3.on||$('ans').classList.contains('open')||$('panel').classList.contains('open')||document.activeElement===$('txt')){sleepT=setTimeout(trySleep,5000);return}
+  document.body.classList.remove('awake');
+}
+function tickClock(){const d=new Date();$('clock').textContent=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
+tickClock();setInterval(tickClock,1000);
+
+/* ---------- abertura original (som sintetizado + animação) ---------- */
+function introSound(){
+  try{
+    const A=new(window.AudioContext||window.webkitAudioContext)();A.resume&&A.resume();
+    const t=A.currentTime,out=A.createGain();out.gain.value=.4;out.connect(A.destination);
+    const o=A.createOscillator(),f=A.createBiquadFilter(),g=A.createGain();
+    o.type='sawtooth';o.frequency.setValueAtTime(50,t);o.frequency.exponentialRampToValueAtTime(260,t+3.2);
+    f.type='lowpass';f.frequency.setValueAtTime(150,t);f.frequency.exponentialRampToValueAtTime(3000,t+3.2);
+    g.gain.setValueAtTime(.001,t);g.gain.exponentialRampToValueAtTime(.3,t+2.8);g.gain.exponentialRampToValueAtTime(.001,t+4);
+    o.connect(f);f.connect(g);g.connect(out);o.start(t);o.stop(t+4.1);
+    const tone=(fr,st,d,v)=>{const s=A.createOscillator(),e=A.createGain();s.type='sine';s.frequency.value=fr;e.gain.setValueAtTime(v,t+st);e.gain.exponentialRampToValueAtTime(.001,t+st+d);s.connect(e);e.connect(out);s.start(t+st);s.stop(t+st+d+.05)};
+    for(let i=0;i<5;i++)tone(900+i*220,.5+i*.65,.09,.18);
+    [392,587,784,1175].forEach(fr=>tone(fr,3.3,1.3,.14));
+    setTimeout(()=>{try{A.close()}catch(e){}},6500);
+  }catch(e){}
+}
+function playIntro(cb){
+  if(cfg.introFull==='never'){cb();return}
+  wakeUp();
+  const b=$('boot');b.innerHTML='';b.classList.add('on');
+  const L=['INICIALIZANDO NÚCLEO...','CALIBRANDO SENSORES...','CARREGANDO PROTOCOLOS DE VOZ...','CONECTANDO MÓDULOS DE IA...',cfg.name.toUpperCase()+' ONLINE'];
+  L.forEach((s,i)=>setTimeout(()=>{const d=document.createElement('div');d.textContent='> '+s;b.appendChild(d)},500+i*650));
+  introSound();
+  setTimeout(()=>{b.classList.remove('on');setTimeout(()=>{b.innerHTML=''},700)},4200);
+  setTimeout(cb,4300);
+}
+
+/* ---------- holograma 3D controlado por gestos ---------- */
+const d3={on:false,ready:false,idx:0,rx:0,ry:0,tx:0,ty:0,s:1,ts:1,k:1,pin:false,lastPin:0,lt:-1,raf:0,stream:null,noHand:0,models:[]};
+const HAND_MODEL='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+function resize3D(){
+  if(!d3.ready)return;
+  const w=innerWidth,h=innerHeight;
+  d3.r.setPixelRatio(Math.min(devicePixelRatio||1,2));d3.r.setSize(w,h,false);
+  d3.cam.aspect=w/h;d3.cam.updateProjectionMatrix();d3.k=Math.min(1,(w/h)*1.7)*0.9;
+}
+addEventListener('resize',()=>{if(d3.on)resize3D()});
+function buildModels(){
+  const T=d3.THREE,col=new T.Color(cfg.color);
+  const M=(o=.85)=>new T.MeshBasicMaterial({color:col,wireframe:true,transparent:true,opacity:o});
+  const W=()=>new T.MeshBasicMaterial({color:0xffffff,wireframe:true});
+  return [
+    {name:'REATOR',g(){const g=new T.Group();
+      g.add(new T.Mesh(new T.TorusGeometry(1.5,.16,10,48),M()));
+      g.add(new T.Mesh(new T.TorusGeometry(1,.1,10,40),M(.7)));
+      g.add(new T.Mesh(new T.IcosahedronGeometry(.5,1),W()));
+      for(let i=0;i<10;i++){const a=i/10*Math.PI*2,b=new T.Mesh(new T.BoxGeometry(.22,.5,.12),M(.6));b.position.set(Math.cos(a)*1.25,Math.sin(a)*1.25,0);b.rotation.z=a-Math.PI/2;g.add(b)}
+      return g}},
+    {name:'GLOBO',g(){const g=new T.Group();
+      g.add(new T.Mesh(new T.SphereGeometry(1.5,20,14),M(.7)));
+      for(let i=0;i<3;i++){const r=new T.Mesh(new T.TorusGeometry(1.8,.015,6,72),M(.9));r.rotation.set(i*Math.PI/3,i*.9,0);g.add(r)}
+      g.add(new T.Mesh(new T.IcosahedronGeometry(.4,1),W()));
+      return g}},
+    {name:'TESSERACT',g(){const g=new T.Group();
+      g.add(new T.Mesh(new T.BoxGeometry(2.4,2.4,2.4,2,2,2),M()));
+      const i=new T.Mesh(new T.BoxGeometry(1.2,1.2,1.2),W());g.add(i);
+      const m=new T.Mesh(new T.OctahedronGeometry(1.9),M(.4));g.add(m);
+      return g}},
+    {name:'NÓ QUÂNTICO',g(){const g=new T.Group();
+      g.add(new T.Mesh(new T.TorusKnotGeometry(1,.3,120,12,2,3),M()));
+      return g}}
+  ];
+}
+function setModel(i){
+  d3.idx=i;while(d3.grp.children.length)d3.grp.remove(d3.grp.children[0]);
+  d3.grp.add(d3.models[i].g());$('d3_name').textContent=d3.models[i].name;
+}
+function drawHands(hs){
+  const c=$('d3_hand'),g=c.getContext('2d');g.clearRect(0,0,c.width,c.height);g.fillStyle=cfg.color;
+  for(const h of hs)for(const p of h){g.beginPath();g.arc((1-p.x)*c.width,p.y*c.height,2.2,0,7);g.fill()}
+}
+async function open3D(){
+  if(d3.on)return;d3.on=true;wakeUp();
+  $('d3').classList.add('open');const msg=$('d3_msg');msg.style.display='block';msg.textContent='CARREGANDO 3D E RASTREADOR DE MÃO...';
+  try{
+    if(!d3.ready){
+      const V='0.10.14';
+      const [THREE,vis]=await Promise.all([
+        import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js'),
+        import(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${V}/vision_bundle.mjs`)]);
+      const fs=await vis.FilesetResolver.forVisionTasks(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${V}/wasm`);
+      const opts=d=>({baseOptions:{modelAssetPath:HAND_MODEL,delegate:d},runningMode:'VIDEO',numHands:2});
+      let hl;try{hl=await vis.HandLandmarker.createFromOptions(fs,opts('GPU'))}catch(e){hl=await vis.HandLandmarker.createFromOptions(fs,opts('CPU'))}
+      d3.THREE=THREE;d3.hl=hl;
+      d3.r=new THREE.WebGLRenderer({canvas:$('d3_cv'),alpha:true,antialias:true});
+      d3.scene=new THREE.Scene();d3.cam=new THREE.PerspectiveCamera(50,1,.1,100);d3.cam.position.z=6;
+      d3.grp=new THREE.Group();d3.scene.add(d3.grp);d3.ready=true;
+    }
+    if(!d3.on)return;
+    resize3D();
+    const st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:640,height:480},audio:false});
+    if(!d3.on){st.getTracks().forEach(t=>t.stop());return}
+    d3.stream=st;const v=$('d3_vid');v.srcObject=st;await v.play();
+    d3.models=buildModels();setModel(d3.idx);
+    msg.style.display='none';loop3D();
+  }catch(e){msg.textContent='ERRO: '+(e.message||e)+' — verifique a internet e a permissão da câmera.'}
+}
+function close3D(){
+  d3.on=false;cancelAnimationFrame(d3.raf);
+  if(d3.stream){d3.stream.getTracks().forEach(t=>t.stop());d3.stream=null}
+  $('d3').classList.remove('open');
+}
+function loop3D(){
+  if(!d3.on)return;d3.raf=requestAnimationFrame(loop3D);
+  const v=$('d3_vid');
+  if(v.readyState>=2&&v.currentTime!==d3.lt){
+    d3.lt=v.currentTime;
+    let res=null;try{res=d3.hl.detectForVideo(v,performance.now())}catch(e){}
+    const hs=(res&&res.landmarks)||[];
+    drawHands(hs);
+    const palm=h=>({x:(h[0].x+h[5].x+h[17].x)/3,y:(h[0].y+h[5].y+h[17].y)/3});
+    d3.noHand=hs.length?0:d3.noHand+1;
+    if(hs.length>=2){
+      const a=palm(hs[0]),b=palm(hs[1]);
+      d3.ts=Math.max(.4,Math.min(3,.3+Math.hypot(a.x-b.x,a.y-b.y)*4));
+    }else if(hs.length===1){
+      const h=hs[0],p=palm(h);
+      d3.ty=((1-p.x)-.5)*Math.PI*2.4;d3.tx=(p.y-.5)*Math.PI*1.4;
+      const size=Math.hypot(h[0].x-h[9].x,h[0].y-h[9].y)||1;
+      const pin=Math.hypot(h[4].x-h[8].x,h[4].y-h[8].y)/size<.28,now=performance.now();
+      if(pin&&!d3.pin&&now-d3.lastPin>1200){d3.lastPin=now;setModel((d3.idx+1)%d3.models.length)}
+      d3.pin=pin;
+    }else d3.pin=false;
+  }
+  if(d3.noHand>30)d3.ty+=0.01;
+  d3.ry+=(d3.ty-d3.ry)*.15;d3.rx+=(d3.tx-d3.rx)*.15;d3.s+=(d3.ts-d3.s)*.12;
+  d3.grp.rotation.set(d3.rx,d3.ry,0);d3.grp.scale.setScalar(d3.s*d3.k);
+  d3.r.render(d3.scene,d3.cam);
+}
+$('b3d').onclick=open3D;
+$('d3_close').onclick=close3D;
+
+/* ---------- IA (ChatGPT / Gemini / Grok) ---------- */
+let thinking=false,hist=[];
+const PROV={
+  openai:{name:'ChatGPT',key:()=>cfg.kOpenai||'',model:()=>cfg.mOpenai},
+  gemini:{name:'Gemini',key:()=>cfg.kGemini||'',model:()=>cfg.mGemini},
+  grok:{name:'Grok',key:()=>cfg.kGrok||'',model:()=>cfg.mGrok}};
+const aiReady=()=>{const p=PROV[cfg.ai];return !!(p&&p.key().trim())};
+const sysPrompt=()=>cfg.persona.replace(/\{name\}/g,cfg.name).replace(/\{user\}/g,cfg.user);
+async function callAI(prov,msgs){
+  const key=PROV[prov].key().trim(),model=PROV[prov].model().trim();
+  if(prov==='gemini'){
+    const body={systemInstruction:{parts:[{text:sysPrompt()}]},contents:msgs.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))};
+    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)});
+    const j=await r.json();if(!r.ok)throw new Error(j.error?.message||r.status);
+    return j.candidates?.[0]?.content?.parts?.map(p=>p.text).join('')||'(sem resposta)';
+  }
+  const url=prov==='openai'?'https://api.openai.com/v1/chat/completions':'https://api.x.ai/v1/chat/completions';
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify({model,messages:[{role:'system',content:sysPrompt()},...msgs]})});
+  const j=await r.json();if(!r.ok)throw new Error(j.error?.message||(typeof j.error==='string'?j.error:r.status));
+  return j.choices?.[0]?.message?.content||'(sem resposta)';
+}
+async function askAI(text){
+  thinking=true;setState('thinking');pauseAll();
+  hist.push({role:'user',content:text});if(hist.length>12)hist=hist.slice(-12);
+  try{
+    const ans=await callAI(cfg.ai,hist);
+    hist.push({role:'assistant',content:ans});thinking=false;
+    showAns(ans,PROV[cfg.ai].name.toUpperCase());
+    let spoken=ans.replace(/```[\s\S]*?```/g,' ').replace(/[*#`_>]/g,'').replace(/\s+/g,' ').trim();
+    if(spoken.length>600){spoken=spoken.slice(0,600);const i=spoken.lastIndexOf('. ');if(i>200)spoken=spoken.slice(0,i+1)}
+    if(/```/.test(ans))spoken=(spoken?spoken.slice(0,300)+' ':'')+'O código está na tela.';
+    say(spoken||'Pronto.');
+  }catch(e){
+    thinking=false;hist.pop();
+    log('Erro: '+e.message);
+    say(`Não consegui falar com o ${PROV[cfg.ai].name}. Veja a chave e o modelo na engrenagem.`);
+  }
+}
+const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function showAns(text,who){
+  let h='';
+  text.split('```').forEach((p,i)=>{
+    if(i%2)h+=`<div class="code"><button class="cp">COPIAR</button><pre>${esc(p.replace(/^[^\n]*\n/,''))}</pre></div>`;
+    else if(p.trim())h+=`<p>${esc(p).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>')}</p>`;
+  });
+  $('ans_who').textContent=who;$('ans_body').innerHTML=h;$('ans').classList.add('open');
+  document.querySelectorAll('#ans_body .cp').forEach(b=>b.onclick=()=>{try{navigator.clipboard.writeText(b.nextElementSibling.textContent);b.textContent='COPIADO'}catch(e){}});
+}
+$('ans_close').onclick=()=>$('ans').classList.remove('open');
+function sendText(){const v=$('txt').value.trim();if(!v||thinking)return;$('txt').value='';$('txt').blur();log('Você: '+v);handle(v)}
+$('b_send').onclick=sendText;
+$('txt').addEventListener('keydown',e=>{if(e.key==='Enter')sendText()});
+
+/* ---------- ligar / desligar ---------- */
+let wake=null;
+async function startAll(){
+  active=true;$('power').textContent='DESLIGAR';
+  try{wake=await navigator.wakeLock.request('screen')}catch(e){}
+  const h=new Date().getHours();const g=h<12?'Bom dia':h<18?'Boa tarde':'Boa noite';
+  playIntro(()=>say(`${g}, ${cfg.user}. Todos os sistemas estão online e operando normalmente. ${cfg.mode==='clap'?'Bata palmas quando precisar de mim.':'Chame meu nome quando precisar de mim.'}`));
+}
+function stopAll(){
+  active=false;pauseAll();speechSynthesis.cancel();spkId++;speaking=false;busy=false;awaiting=false;
+  if(wake){try{wake.release()}catch(e){}wake=null}
+  $('power').textContent='INICIAR';setState('off');
+}
+$('power').onclick=()=>active?stopAll():startAll();
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&active&&!wake)navigator.wakeLock?.request('screen').then(w=>wake=w).catch(()=>{})});
+
+/* ---------- configurações ---------- */
+function fillVoices(){
+  const vs=speechSynthesis.getVoices().slice().sort((a,b)=>(b.lang.startsWith('pt')-a.lang.startsWith('pt'))||a.name.localeCompare(b.name));
+  $('s_voice').innerHTML='<option value="">Padrão do aparelho</option>'+vs.map(v=>`<option value="${v.name}">${v.name} (${v.lang})</option>`).join('');
+  $('s_voice').value=cfg.voice;
+}
+speechSynthesis.onvoiceschanged=fillVoices;
+function applyCfg(){
+  document.documentElement.style.setProperty('--c',cfg.color);
+  $('title').textContent=cfg.name.toUpperCase().split('').join(' ');
+  $('s_name').value=cfg.name;$('s_user').value=cfg.user;$('s_rate').value=cfg.rate;$('s_pitch').value=cfg.pitch;
+  $('s_color').value=cfg.color;$('s_mode').value=cfg.mode;$('s_claps').value=cfg.claps;$('s_sens').value=cfg.sens;
+  $('s_greet').value=cfg.greet;$('s_custom').value=cfg.custom;
+  $('s_ai').value=cfg.ai;$('s_kGemini').value=cfg.kGemini;$('s_mGemini').value=cfg.mGemini;$('s_kOpenai').value=cfg.kOpenai;$('s_mOpenai').value=cfg.mOpenai;$('s_kGrok').value=cfg.kGrok;$('s_mGrok').value=cfg.mGrok;$('s_persona').value=cfg.persona;$('s_intro').value=cfg.introFull;
+  $('v_rate').textContent=(+cfg.rate).toFixed(2);$('v_pitch').textContent=(+cfg.pitch).toFixed(2);$('v_sens').textContent=cfg.sens;
+}
+const bind=(id,key,conv=x=>x,after)=>$(id).addEventListener('input',()=>{cfg[key]=conv($(id).value);save();applyCfg();after&&after()});
+bind('s_name','name',v=>v.trim()||'Jarvis');bind('s_user','user',v=>v.trim()||'senhor');
+bind('s_voice','voice');bind('s_rate','rate',Number);bind('s_pitch','pitch',Number);bind('s_color','color');
+bind('s_ai','ai');bind('s_intro','introFull');bind('s_persona','persona');
+bind('s_kGemini','kGemini',v=>v.trim());bind('s_mGemini','mGemini',v=>v.trim());
+bind('s_kOpenai','kOpenai',v=>v.trim());bind('s_mOpenai','mOpenai',v=>v.trim());
+bind('s_kGrok','kGrok',v=>v.trim());bind('s_mGrok','mGrok',v=>v.trim());
+bind('s_claps','claps',Number);bind('s_sens','sens',Number);bind('s_greet','greet');bind('s_custom','custom');
+bind('s_mode','mode',x=>x,()=>{if(active){pauseAll();resume()}});
+$('gear').onclick=()=>$('panel').classList.add('open');
+$('b_close').onclick=()=>$('panel').classList.remove('open');
+$('b_test').onclick=()=>{const a=active;active=false;say(`Olá ${cfg.user}, eu sou ${cfg.name}. Esta é a minha voz.`,()=>{active=a})};
+$('b_reset').onclick=()=>{if(confirm('Restaurar configurações padrão?')){cfg=Object.assign({},DEFAULT);save();applyCfg();fillVoices()}};
+
+/* ---------- HUD (canvas) ---------- */
+const cv=$('hud'),ctx=cv.getContext('2d');
+function resize(){const d=devicePixelRatio||1;cv.width=innerWidth*d;cv.height=innerHeight*d;ctx.setTransform(d,0,0,d,0,0)}
+addEventListener('resize',resize);resize();
+function rgba(a){const n=parseInt(cfg.color.replace('#',''),16);return`rgba(${n>>16&255},${n>>8&255},${n&255},${a})`}
+let T=0,level=0;
+function draw(){
+  T+=0.016;const W=innerWidth,H=innerHeight,cx=W/2,cy=H*0.36,R=Math.min(W,H*0.7)*0.26;
+  ctx.clearRect(0,0,W,H);ctx.lineCap='round';
+  let target=state==='speaking'?0.45+0.45*Math.abs(Math.sin(T*9)*Math.sin(T*3.3)):state==='listening'?0.3+Math.min(1,micLevel*1.5)*0.7+0.15*Math.sin(T*6):state==='off'?0.02:state==='thinking'?0.3+0.2*Math.sin(T*8):0.12+0.06*Math.sin(T*2);
+  level+=(target-level)*0.15;
+  let g=ctx.createRadialGradient(cx,cy,0,cx,cy,R*1.8);g.addColorStop(0,rgba(0.08+0.3*level));g.addColorStop(1,rgba(0));
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  // marcas externas
+  ctx.save();ctx.translate(cx,cy);ctx.rotate(T*0.15);ctx.strokeStyle=rgba(0.55);ctx.lineWidth=2;
+  for(let i=0;i<72;i++){const a=i/72*Math.PI*2,l=i%6===0?14:6,r=R*1.4;ctx.beginPath();ctx.moveTo(Math.cos(a)*r,Math.sin(a)*r);ctx.lineTo(Math.cos(a)*(r+l),Math.sin(a)*(r+l));ctx.stroke()}
+  ctx.restore();
+  const arcs=(r,w,n,span,rot,al)=>{ctx.strokeStyle=rgba(al);ctx.lineWidth=w;for(let i=0;i<n;i++){const s=rot+i*Math.PI*2/n;ctx.beginPath();ctx.arc(cx,cy,r,s,s+span);ctx.stroke()}};
+  arcs(R*1.2,4,3,1.4,T*0.7,0.9);arcs(R*1.03,2,5,0.8,-T*1.1,0.7);arcs(R*0.82,6,2,2.2,T*1.6,0.85);
+  ctx.setLineDash([3,8]);ctx.lineDashOffset=-T*30;ctx.strokeStyle=rgba(0.6);ctx.lineWidth=2;
+  ctx.beginPath();ctx.arc(cx,cy,R*0.93,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
+  // barras de áudio
+  ctx.strokeStyle=rgba(0.9);ctx.lineWidth=3;
+  for(let i=0;i<48;i++){const a=i/48*Math.PI*2,n=0.5+0.5*Math.sin(T*5+i*1.7)*Math.cos(T*2.3+i),l=R*(0.06+0.22*level*n),r0=R*0.52;
+    ctx.beginPath();ctx.moveTo(cx+Math.cos(a)*r0,cy+Math.sin(a)*r0);ctx.lineTo(cx+Math.cos(a)*(r0+l),cy+Math.sin(a)*(r0+l));ctx.stroke()}
+  // núcleo
+  const cr=R*0.4*(1+level*0.2);
+  g=ctx.createRadialGradient(cx,cy,0,cx,cy,cr);g.addColorStop(0,'rgba(255,255,255,.95)');g.addColorStop(0.35,rgba(0.9));g.addColorStop(1,rgba(0.05));
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,cr,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle=rgba(1);ctx.lineWidth=3;ctx.beginPath();
+  for(let i=0;i<=3;i++){const a=T*0.5+i*Math.PI*2/3-Math.PI/2,r=R*0.3;i?ctx.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r):ctx.moveTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r)}
+  ctx.stroke();
+  requestAnimationFrame(draw);
+}
+// tocar no reator = ativar manualmente
+cv.addEventListener('click',()=>{if(!document.body.classList.contains('awake')){wakeUp();return}if(active&&!busy&&!speaking)onClap()});
+
+applyCfg();fillVoices();setState('off');draw();
+if(NO_TTS)log('Este navegador não tem voz falada. Abra o link no Chrome (Android).');
+if(!(window.SpeechRecognition||window.webkitSpeechRecognition))log('Este navegador não tem reconhecimento de voz. Abra o link no Chrome (Android).');
+</script>
+</body>
+</html>

@@ -91,6 +91,9 @@ body:not(.awake) #clock{opacity:.8}
 </style>
 </head>
 <body class="awake">
+<div id="boot_msg" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#00d0ff;font-family:monospace;letter-spacing:.4em;font-size:18px;pointer-events:none">JARVIS</div>
+<pre id="errbox" style="display:none;position:fixed;left:8px;right:8px;bottom:8px;max-height:45%;overflow:auto;z-index:99;background:#2a0000;color:#fff;font:11px/1.4 monospace;padding:8px;white-space:pre-wrap;border:1px solid #f55"></pre>
+<script>window.addEventListener('error',function(e){var b=document.getElementById('errbox');if(!b)return;b.style.display='block';b.textContent+='ERRO: '+(e.message||'desconhecido')+' ('+String(e.filename||'').split('/').pop()+':'+e.lineno+')\n'});</script>
 <canvas id="hud"></canvas>
 <div id="clock"></div>
 <div id="boot"></div>
@@ -108,11 +111,11 @@ body:not(.awake) #clock{opacity:.8}
     <div id="d3_permerr"></div>
     <button id="d3_skip" style="margin-top:12px">USAR SÓ O TOQUE</button>
   </div>
-  <div id="d3_btns"><button id="d3_prev">◀</button><button id="d3_file">ABRIR ARQUIVO</button><button id="d3_next">▶</button></div>
+  <div id="d3_btns"><button id="d3_cam" style="display:none">ATIVAR GESTOS</button><button id="d3_prev">◀</button><button id="d3_file">ABRIR ARQUIVO</button><button id="d3_next">▶</button><button id="d3_reset">↺</button></div>
   <div id="d3_tools"><input id="d3_txt" placeholder="Criar em 3D: ex. foguete, casa, robô" autocomplete="off"><button id="d3_go">CRIAR</button></div>
   <input id="d3_fi" type="file" accept=".glb,.gltf,image/*" hidden>
   <div id="d3_box"><video id="d3_vid" playsinline muted autoplay></video></div>
-  <div id="d3_hint">PINÇA: AGARRAR E GIRAR<br>MÃO ABERTA: MOVER<br>DESLIZAR RÁPIDO: TROCAR<br>2 MÃOS ABERTAS: EXPLODIR<br>2 PINÇAS: ESCALA E GIRO<br>PUNHO (SEGURAR): REINICIAR</div>
+  <div id="d3_hint">PUNHO: SEGURA E MOVE<br>PINÇA: ZOOM (AFASTE OS DEDOS)<br>1 DEDO: GIRA<br>2 MÃOS ABRINDO: DESMONTA<br>2 MÃOS FECHANDO: MONTA<br>DESLIZAR MÃO ABERTA: TROCA</div>
   <button id="d3_close">FECHAR</button>
 </div>
 <div id="top"><span id="title">JARVIS</span><span><button id="b3d">3D</button> <button id="gear">⚙</button></span></div>
@@ -217,8 +220,8 @@ const DEFAULT={name:'Jarvis',user:'senhor',voice:'',rate:0.94,pitch:0.7,color:'#
  greet:'Pois não, {user}?',ai:'none',ttsVoice:'none',introFull:'start',kGemini:'',kOpenai:'',kGrok:'',mGemini:'gemini-2.0-flash',mOpenai:'gpt-4o-mini',mGrok:'grok-3-mini',
  persona:'Você é {name}, um assistente pessoal inspirado no J.A.R.V.I.S. dos filmes dos Vingadores. Responda sempre em português do Brasil, de forma educada, elegante e com leve humor sutil. Chame o usuário de {user}. Dê respostas curtas e diretas, pois serão faladas em voz alta, a menos que peçam código ou uma explicação longa. Ao escrever código, use blocos de código com três crases.',
  custom:'modo festa => Protocolo festa iniciado, {user}. => https://www.youtube.com/results?search_query=musica+para+festa'};
-let cfg=Object.assign({},DEFAULT,JSON.parse(localStorage.getItem('jarvis_cfg')||'{}'));
-const save=()=>localStorage.setItem('jarvis_cfg',JSON.stringify(cfg));
+let cfg;try{cfg=Object.assign({},DEFAULT,JSON.parse(localStorage.getItem('jarvis_cfg')||'{}'))}catch(e){cfg=Object.assign({},DEFAULT)}
+const save=()=>{try{localStorage.setItem('jarvis_cfg',JSON.stringify(cfg))}catch(e){}};
 const norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
 
 /* ---------- estado ---------- */
@@ -573,14 +576,26 @@ async function loadThree(){
   d3.dust=new THREE.Points(g,new THREE.PointsMaterial({color:col,size:.03,transparent:true,opacity:.6}));d3.scene.add(d3.dust);
   d3.items=builtIn();d3.ready=true;
 }
+const hlOpts=d=>({baseOptions:{modelAssetPath:HAND_MODEL,delegate:d},runningMode:'VIDEO',numHands:2});
+const withTimeout=(p,ms,msg)=>Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error(msg)),ms))]);
 async function loadVision(){
   if(d3.hl)return;
-  const base='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
-  const vis=await import(base+'/vision_bundle.mjs');
-  const fs=await vis.FilesetResolver.forVisionTasks(base+'/wasm');
-  const opts=d=>({baseOptions:{modelAssetPath:HAND_MODEL,delegate:d},runningMode:'VIDEO',numHands:2});
-  try{d3.hl=await vis.HandLandmarker.createFromOptions(fs,opts('GPU'))}catch(e){d3.hl=await vis.HandLandmarker.createFromOptions(fs,opts('CPU'))}
+  const bases=['https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14','https://unpkg.com/@mediapipe/tasks-vision@0.10.14'];
+  let vis=null,base='',last=null;
+  for(const bs of bases){try{vis=await withTimeout(import(bs+'/vision_bundle.mjs'),20000,'tempo esgotado');base=bs;break}catch(e){last=e}}
+  if(!vis)throw new Error('o rastreador de mão não carregou ('+((last&&last.message)||'sem internet')+')');
+  const fs=await withTimeout(vis.FilesetResolver.forVisionTasks(base+'/wasm'),30000,'tempo esgotado ao carregar o motor de mão');
+  d3.vis=vis;d3.fs=fs;
+  try{d3.hl=await withTimeout(vis.HandLandmarker.createFromOptions(fs,hlOpts('GPU')),40000,'tempo esgotado ao baixar o modelo da mão');d3.delegate='GPU'}
+  catch(e){d3.hl=await withTimeout(vis.HandLandmarker.createFromOptions(fs,hlOpts('CPU')),40000,'tempo esgotado ao baixar o modelo da mão');d3.delegate='CPU'}
 }
+async function switchCPU(){
+  if(d3.switching)return;d3.switching=true;setSt('AJUSTANDO O RASTREADOR (MODO CPU)...');
+  try{d3.hl=await withTimeout(d3.vis.HandLandmarker.createFromOptions(d3.fs,hlOpts('CPU')),40000,'tempo esgotado');d3.delegate='CPU';d3.fails=0}
+  catch(e){setSt('ERRO NO RASTREADOR: '+((e&&e.message)||e))}
+  d3.switching=false;
+}
+function updateCamBtn(){const b=$('d3_cam');if(b)b.style.display=d3.camOn?'none':'inline-block'}
 function showPerm(msg,canAsk){
   $('d3_permerr').textContent=msg||'';$('d3_allow').style.display=canAsk?'inline-block':'none';
   $('d3_perm').classList.add('on');setSt('CÂMERA DESLIGADA · USE O TOQUE');
@@ -602,7 +617,7 @@ async function startCam(){
     setMsg('CARREGANDO RASTREADOR DE MÃO...');
     await loadVision();
     if(!d3.on)return;
-    d3.camOn=true;setMsg('');setSt('CÂMERA ATIVA · PROCURANDO MÃO...');
+    d3.camOn=true;d3.fails=0;setMsg('');setSt('CÂMERA ATIVA · PROCURANDO MÃO...');updateCamBtn();
   }catch(e){
     setMsg('');
     const denied=e&&(e.name==='NotAllowedError'||e.name==='SecurityError');
@@ -612,7 +627,7 @@ async function startCam(){
 async function open3D(){
   if(d3.on)return;
   d3.on=true;d3.mode='none';d3.noHand=99;wakeUp();
-  $('d3').classList.add('open');setMsg('CARREGANDO HOLOGRAMA...');setSt('INICIANDO...');setGest('');
+  $('d3').classList.add('open');setMsg('CARREGANDO HOLOGRAMA...');setSt('INICIANDO...');setGest('');updateCamBtn();
   try{
     await loadThree();
     if(!d3.on)return;
@@ -642,49 +657,58 @@ function drawSkel(L){
 function analyze(lm,i){
   const vv=$('d3_vid'),asp=(vv&&vv.videoWidth&&vv.videoHeight)?vv.videoWidth/vv.videoHeight:4/3,P=j=>({x:1-lm[j].x,y:lm[j].y});
   const dist=(a,b)=>Math.hypot((a.x-b.x)*asp,a.y-b.y);
-  const w=P(0),size=dist(w,P(9))||.1,ratio=dist(P(4),P(8))/size;
-  if(!d3.pin[i]&&ratio<.3)d3.pin[i]=true;else if(d3.pin[i]&&ratio>.45)d3.pin[i]=false;
-  let ext=0;[[8,6],[12,10],[16,14],[20,18]].forEach(([t,q])=>{if(dist(P(t),w)>dist(P(q),w)*1.08)ext++});
-  const p0=P(0),p5=P(5),p17=P(17),t4=P(4),t8=P(8);
-  return{p:{x:(p0.x+p5.x+p17.x)/3,y:(p0.y+p5.y+p17.y)/3},mid:{x:(t4.x+t8.x)/2,y:(t4.y+t8.y)/2},pinch:d3.pin[i],ext,open:ext>=3&&!d3.pin[i],fist:ext===0&&!d3.pin[i]};
+  const w=P(0),size=dist(w,P(9))||.1;
+  const ratio=dist(P(4),P(8))/size,reach=dist(P(8),w)/size;
+  const f=[[8,6],[12,10],[16,14],[20,18]].map(([t,q])=>dist(P(t),w)>dist(P(q),w)*1.08);
+  const ext=f.filter(Boolean).length,curled=!f[1]&&!f[2]&&!f[3];
+  const thumbOut=dist(P(4),P(5))/size>.55;
+  if(!d3.pin[i]&&ratio<.3&&reach>1)d3.pin[i]=true;else if(d3.pin[i]&&(ratio>.45||reach<.9))d3.pin[i]=false;
+  let pose='other';
+  if(d3.pin[i])pose='zoom';
+  else if(ext>=3)pose='open';
+  else if(curled)pose=(f[0]&&thumbOut)?'zoom':f[0]?'point':'fist';
+  const p0=P(0),p5=P(5),p17=P(17);
+  return{pose,ratio,tip:P(8),p:{x:(p0.x+p5.x+p17.x)/3,y:(p0.y+p5.y+p17.y)/3},pinch:d3.pin[i]};
 }
 function gestures(hs,now){
   const asp=innerWidth/innerHeight,visH=2*6*Math.tan(25*Math.PI/180),visW=visH*asp;
-  const d2=(a,b)=>Math.hypot((a.x-b.x)*asp,a.y-b.y),ang=(a,b)=>Math.atan2(b.y-a.y,(b.x-a.x)*asp);
   d3.noHand=hs.length?0:d3.noHand+1;
   let mode='none',label='';
-  if(hs.length===1){const h=hs[0];mode=h.pinch?'grab':h.fist?'fist':h.open?'move':'hand'}
-  else if(hs.length>=2){const[a,b]=hs;mode=(a.pinch&&b.pinch)?'zoom':(a.open&&b.open)?'explode':'two'}
+  if(hs.length>=2)mode='two';
+  else if(hs.length===1)mode=({fist:'fist',zoom:'zoom',point:'point',open:'move'})[hs[0].pose]||'hand';
   if(mode!==d3.mode){
-    d3.mode=mode;d3.ref={t0:now};d3.fistDone=false;d3.hist=[];
-    if(mode==='grab')d3.ref.last=hs[0].mid;
-    if(mode==='zoom'){const[a,b]=hs;d3.ref.d0=Math.max(.05,d2(a.mid,b.mid));d3.ref.s0=d3.ts;d3.ref.a0=ang(a.mid,b.mid);d3.ref.z0=d3.tz}
+    d3.mode=mode;d3.ref={t0:now};d3.hist=[];
+    if(mode==='fist'){d3.ref.p0=hs[0].p;d3.ref.q0={x:d3.qx,y:d3.qy}}
+    if(mode==='point')d3.ref.last=hs[0].tip;
+    if(mode==='two'){const[a,b]=hs;d3.ref.d0=Math.hypot(a.p.x-b.p.x,a.p.y-b.p.y);d3.ref.e0=d3.te}
   }
-  if(mode==='grab'){
-    const h=hs[0];d3.ty+=(h.mid.x-d3.ref.last.x)*3.2;d3.tx+=(h.mid.y-d3.ref.last.y)*2.4;d3.ref.last=h.mid;label='PINÇA · AGARRAR E GIRAR';
+  if(mode==='fist'){
+    const h=hs[0];d3.qx=d3.ref.q0.x+(h.p.x-d3.ref.p0.x)*visW*1.2;d3.qy=d3.ref.q0.y-(h.p.y-d3.ref.p0.y)*visH*1.2;
+    label='PUNHO · SEGURANDO A IMAGEM';
+  }else if(mode==='zoom'){
+    d3.ts=clamp(.3+hs[0].ratio*2.4,.3,3.5);label='PINÇA · ZOOM '+Math.round(d3.ts*100)+'%';
+  }else if(mode==='point'){
+    const h=hs[0];d3.ty+=(h.tip.x-d3.ref.last.x)*5;d3.tx+=(h.tip.y-d3.ref.last.y)*4;d3.ref.last=h.tip;
+    label='1 DEDO · GIRANDO A IMAGEM';
   }else if(mode==='move'){
     const h=hs[0];d3.hist.push({t:now,x:h.p.x});while(d3.hist.length&&now-d3.hist[0].t>280)d3.hist.shift();
     const o=d3.hist[0],vx=d3.hist.length>2?(h.p.x-o.x)/((now-o.t)/1000):0;
-    if(Math.abs(vx)>1.7&&now-d3.lastSwipe>900){d3.lastSwipe=now;d3.noMoveUntil=now+700;d3.qx=0;d3.qy=0;d3.hist=[];step3D(vx>0?1:-1);label='DESLIZAR · TROCAR MODELO'}
-    else if(now>d3.noMoveUntil){d3.qx=(h.p.x-.5)*visW*.9;d3.qy=(.5-h.p.y)*visH*.9;label='MÃO ABERTA · MOVER'}
-    else label='DESLIZAR · TROCAR MODELO';
-  }else if(mode==='fist'){
-    label='PUNHO · SEGURE PARA REINICIAR';
-    if(now-d3.ref.t0>800&&!d3.fistDone){d3.fistDone=true;d3.tx=0;d3.ty=0;d3.tz=0;d3.qx=0;d3.qy=0;d3.ts=1;d3.te=0}
-    if(d3.fistDone)label='VISÃO REINICIADA';
-  }else if(mode==='zoom'){
-    const[a,b]=hs;d3.ts=clamp(d3.ref.s0*d2(a.mid,b.mid)/d3.ref.d0,.3,3.5);d3.tz=d3.ref.z0-(ang(a.mid,b.mid)-d3.ref.a0);label='DUAS PINÇAS · ESCALA E GIRO';
-  }else if(mode==='explode'){
-    const[a,b]=hs;d3.te=clamp((Math.hypot(a.p.x-b.p.x,a.p.y-b.p.y)-.3)/.4,0,1);label='VISTA EXPLODIDA · '+Math.round(d3.te*100)+'%';
-  }else if(mode==='two')label='DUAS MÃOS DETECTADAS';
-  else if(mode==='hand')label='MÃO DETECTADA';
+    if(Math.abs(vx)>1.7&&now-d3.lastSwipe>900){d3.lastSwipe=now;d3.qx=0;d3.qy=0;d3.hist=[];step3D(vx>0?1:-1);label='DESLIZAR · TROCAR MODELO'}
+    else label='MÃO ABERTA · DESLIZE PARA TROCAR O MODELO';
+  }else if(mode==='two'){
+    const[a,b]=hs,d=Math.hypot(a.p.x-b.p.x,a.p.y-b.p.y);
+    d3.te=clamp(d3.ref.e0+(d-d3.ref.d0)/.35,0,1);
+    label='DUAS MÃOS · '+(d3.te>.02?'DESMONTADO '+Math.round(d3.te*100)+'%':'MONTADO');
+  }else if(mode==='hand')label='MÃO DETECTADA';
   setGest(label);
   setSt(hs.length?('CÂMERA ATIVA · '+hs.length+(hs.length>1?' MÃOS DETECTADAS':' MÃO DETECTADA')):'CÂMERA ATIVA · PROCURANDO MÃO...');
 }
 function detect(now){
   const v=$('d3_vid');
   if(v.readyState<2||v.currentTime===d3.lt)return;d3.lt=v.currentTime;
-  let res=null;try{res=d3.hl.detectForVideo(v,now)}catch(e){return}
+  let res=null;
+  try{res=d3.hl.detectForVideo(v,now);d3.fails=0}
+  catch(e){d3.fails=(d3.fails||0)+1;if(d3.fails===6){if(d3.delegate==='GPU')switchCPU();else setSt('ERRO NO RASTREADOR: '+((e&&e.message)||e))}return}
   const L=(res&&res.landmarks)||[];
   drawSkel(L);gestures(L.map(analyze),now);
 }
@@ -775,8 +799,9 @@ $('d3_fi').onchange=async e=>{
 $('d3_prev').onclick=()=>step3D(-1);$('d3_next').onclick=()=>step3D(1);
 $('d3_file').onclick=()=>$('d3_fi').click();
 $('d3_go').onclick=sendCreate;$('d3_txt').addEventListener('keydown',e=>{if(e.key==='Enter')sendCreate()});
-$('d3_allow').onclick=startCam;$('d3_skip').onclick=()=>$('d3_perm').classList.remove('on');
+$('d3_allow').onclick=startCam;$('d3_cam').onclick=startCam;$('d3_skip').onclick=()=>$('d3_perm').classList.remove('on');
 $('b3d').onclick=open3D;
+$('d3_reset').onclick=()=>{d3.tx=d3.ty=d3.tz=0;d3.qx=d3.qy=0;d3.ts=1;d3.te=0};
 $('d3_close').onclick=close3D;
 
 /* ---------- IA (ChatGPT / Gemini / Grok) ---------- */
@@ -947,9 +972,13 @@ $('b_reset').onclick=()=>{if(confirm('Restaurar configurações padrão?')){cfg=
 const cv=$('hud'),ctx=cv.getContext('2d');
 function resize(){const d=devicePixelRatio||1;cv.width=innerWidth*d;cv.height=innerHeight*d;ctx.setTransform(d,0,0,d,0,0)}
 addEventListener('resize',resize);resize();
+addEventListener('orientationchange',()=>setTimeout(resize,200));addEventListener('load',resize);
+if(window.visualViewport)visualViewport.addEventListener('resize',resize);
+[100,400,1000,2500].forEach(t=>setTimeout(resize,t));
 function rgba(a){const n=parseInt(cfg.color.replace('#',''),16);return`rgba(${n>>16&255},${n>>8&255},${n&255},${a})`}
 let T=0,level=0;
 function draw(){
+  if(Math.abs(cv.width-innerWidth*(devicePixelRatio||1))>1||Math.abs(cv.height-innerHeight*(devicePixelRatio||1))>1)resize();
   T+=0.016;const W=innerWidth,H=innerHeight,cx=W/2,cy=H*0.36,R=Math.min(W,H*0.7)*0.26;
   ctx.clearRect(0,0,W,H);ctx.lineCap='round';
   let target=state==='speaking'?0.45+0.45*Math.abs(Math.sin(T*9)*Math.sin(T*3.3)):state==='listening'?0.3+Math.min(1,micLevel*1.5)*0.7+0.15*Math.sin(T*6):state==='off'?0.02:state==='thinking'?0.3+0.2*Math.sin(T*8):0.12+0.06*Math.sin(T*2);
@@ -981,6 +1010,7 @@ function draw(){
 cv.addEventListener('click',()=>{if(!document.body.classList.contains('awake')){wakeUp();return}if(active&&!busy&&!speaking)onClap()});
 
 applyCfg();fillVoices();setState('off');draw();
+{const bm=document.getElementById('boot_msg');if(bm)bm.remove()}
 if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 if(NO_TTS)log('Este navegador não tem voz falada. Abra o link no Chrome (Android).');
 if(!(window.SpeechRecognition||window.webkitSpeechRecognition))log('Este navegador não tem reconhecimento de voz. Abra o link no Chrome (Android).');

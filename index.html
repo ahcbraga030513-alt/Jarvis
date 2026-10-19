@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <title>JARVIS</title>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
@@ -71,6 +72,22 @@ body:not(.awake) #clock{opacity:.8}
 #d3_msg{position:absolute;top:45%;left:0;right:0;text-align:center;font-size:12px;letter-spacing:.2em;padding:0 16px;line-height:1.8}
 #d3_hint{position:absolute;right:12px;bottom:calc(env(safe-area-inset-bottom) + 14px);width:calc(100% - 170px);font-size:10px;letter-spacing:.08em;line-height:1.7;text-align:right;color:#9fd8ea;font-family:system-ui,sans-serif}
 #d3_close{position:absolute;top:calc(env(safe-area-inset-top) + 12px);right:14px;padding:6px 12px;font-size:11px}
+#d3_cv{touch-action:none}
+#d3_skel{pointer-events:none}
+#d3_box{display:none}
+#d3_perm{position:absolute;left:16px;right:16px;top:50%;transform:translateY(-50%);background:rgba(2,12,18,.95);border:1px solid var(--c);border-radius:10px;padding:20px;text-align:center;display:none;z-index:3;font-family:system-ui,sans-serif;color:#dff6ff;box-shadow:0 0 30px color-mix(in srgb,var(--c) 40%,transparent)}
+#d3_perm.on{display:block}
+.pm_t{font-family:'Orbitron',monospace;letter-spacing:.2em;color:var(--c);margin-bottom:10px;font-size:14px}
+.pm_d{font-size:14px;line-height:1.5;margin-bottom:14px}
+#d3_permerr{color:#ffb0b0;font-size:13px;line-height:1.4;margin:10px 0 0}
+#d3_state{position:absolute;top:calc(env(safe-area-inset-top) + 46px);left:0;right:0;text-align:center;font-size:11px;letter-spacing:.2em;opacity:.85}
+#d3_gest{position:absolute;top:calc(env(safe-area-inset-top) + 68px);left:0;right:0;text-align:center;font-size:13px;letter-spacing:.22em;color:#fff;text-shadow:0 0 10px var(--c);min-height:18px}
+#d3_tools{position:absolute;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 124px);display:flex;gap:8px}
+#d3_tools input{flex:1;min-width:0;background:rgba(0,0,0,.6);border:1px solid var(--c);color:#fff;border-radius:6px;padding:10px;font-size:14px;font-family:system-ui,sans-serif}
+#d3_tools button{padding:8px 12px;font-size:12px}
+#d3_btns{position:absolute;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 172px);display:flex;gap:8px;justify-content:center}
+#d3_btns button{padding:8px 14px;font-size:12px}
+#d3_hint{line-height:1.55}
 </style>
 </head>
 <body class="awake">
@@ -79,10 +96,23 @@ body:not(.awake) #clock{opacity:.8}
 <div id="boot"></div>
 <div id="d3">
   <canvas id="d3_cv"></canvas>
-  <div id="d3_box"><video id="d3_vid" playsinline muted autoplay></video><canvas id="d3_hand" width="132" height="99"></canvas></div>
+  <canvas id="d3_skel"></canvas>
   <div id="d3_name">REATOR</div>
+  <div id="d3_state">INICIANDO...</div>
+  <div id="d3_gest"></div>
   <div id="d3_msg"></div>
-  <div id="d3_hint">MÃO ABERTA: GIRA<br>DUAS MÃOS: TAMANHO<br>PINÇA: TROCA O MODELO</div>
+  <div id="d3_perm">
+    <div class="pm_t">CÂMERA NECESSÁRIA</div>
+    <div class="pm_d">O Jarvis usa a câmera frontal para ver as suas mãos e deixar você controlar o holograma sem tocar na tela. O vídeo fica só no seu celular e não é enviado a ninguém.</div>
+    <button id="d3_allow">PERMITIR CÂMERA</button>
+    <div id="d3_permerr"></div>
+    <button id="d3_skip" style="margin-top:12px">USAR SÓ O TOQUE</button>
+  </div>
+  <div id="d3_btns"><button id="d3_prev">◀</button><button id="d3_file">ABRIR ARQUIVO</button><button id="d3_next">▶</button></div>
+  <div id="d3_tools"><input id="d3_txt" placeholder="Criar em 3D: ex. foguete, casa, robô" autocomplete="off"><button id="d3_go">CRIAR</button></div>
+  <input id="d3_fi" type="file" accept=".glb,.gltf,image/*" hidden>
+  <div id="d3_box"><video id="d3_vid" playsinline muted autoplay></video></div>
+  <div id="d3_hint">PINÇA: AGARRAR E GIRAR<br>MÃO ABERTA: MOVER<br>DESLIZAR RÁPIDO: TROCAR<br>2 MÃOS ABERTAS: EXPLODIR<br>2 PINÇAS: ESCALA E GIRO<br>PUNHO (SEGURAR): REINICIAR</div>
   <button id="d3_close">FECHAR</button>
 </div>
 <div id="top"><span id="title">JARVIS</span><span><button id="b3d">3D</button> <button id="gear">⚙</button></span></div>
@@ -347,8 +377,15 @@ function handle(raw){
     cfg.ai=k;save();applyCfg();say(`Certo, ${U}. Agora estou usando o ${PROV[k].name}.`);return}
   if(/(limpar|apagar|esquecer) (a )?(conversa|memoria)/.test(t)){hist=[];say('Conversa reiniciada.');return}
   if(/(fechar|sair d[oe]|encerrar) (o )?(3d|holograma|modo 3d|modelo)/.test(t)){close3D();say('Holograma encerrado.');return}
-  if(/(proximo|trocar|outro|mudar) (o )?modelo/.test(t)){if(!d3.on){say('Abra o modo 3D primeiro.');return}setModel((d3.idx+1)%d3.models.length);say('Modelo trocado.');return}
-  if(/(modo 3d|abrir (o )?3d|holograma|modelo 3d|mostrar modelo)/.test(t)){say(`Ativando o holograma, ${U}. Mostre a mão para a câmera.`,()=>{open3D();resume()});return}
+  if(/\b(crie|criar|faca|fazer|gere|gerar|monte|montar|desenhe|desenhar|construa|construir)\b.*(3d|hologr)/.test(t)){
+    const sub=t.replace(/\b(crie|criar|faca|fazer|gere|gerar|monte|montar|desenhe|desenhar|construa|construir|um|uma|o|a|os|as|modelo|modelos|3d|em|de|do|da|holograma|holografico|hologr\w*|para|mim|me|projeto|objeto|por favor)\b/g,' ').replace(/\s+/g,' ').trim();
+    if(!sub){say('O que você quer que eu crie em 3D?');return}
+    log('Criando '+sub+' em 3D...');create3D(sub).then(ok=>say(ok?`Pronto, ${U}. Modelo criado.`:`Não consegui criar esse modelo agora, ${U}.`));return}
+  if(/modelo anterior/.test(t)){if(!d3.on){say('Abra o modo 3D primeiro.');return}step3D(-1);say('Modelo anterior.');return}
+  if(/(proximo|trocar|outro|mudar) (o )?modelo/.test(t)){if(!d3.on){say('Abra o modo 3D primeiro.');return}step3D(1);say('Modelo trocado.');return}
+  if(/(explodir|separar as pecas|desmontar)/.test(t)){if(!d3.on){say('Abra o modo 3D primeiro.');return}d3.te=1;say('Vista explodida.');return}
+  if(/(juntar|remontar|unir as pecas)/.test(t)){if(!d3.on){say('Abra o modo 3D primeiro.');return}d3.te=0;say('Peças reunidas.');return}
+  if(/(modo 3d|abrir (o )?3d|holograma|modelo 3d|mostrar modelo)/.test(t)){say(`Ativando o holograma, ${U}. Permita o acesso à câmera e mostre a mão.`,()=>{open3D();resume()});return}
   if(/(que horas|horas sao|hora atual|me diga as horas)/.test(t)){const d=new Date();say(`São ${d.getHours()} e ${String(d.getMinutes()).padStart(2,'0')}, ${U}.`);return}
   if(/(que dia|data de hoje|dia e hoje|qual a data)/.test(t)){say('Hoje é '+new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+'.');return}
   if(/bateria/.test(t)){
@@ -422,107 +459,323 @@ function playIntro(cb){
 }
 
 /* ---------- holograma 3D controlado por gestos ---------- */
-const d3={on:false,ready:false,idx:0,rx:0,ry:0,tx:0,ty:0,s:1,ts:1,k:1,pin:false,lastPin:0,lt:-1,raf:0,stream:null,noHand:0,models:[]};
+const d3={on:false,ready:false,camOn:false,idx:0,items:[],cur:null,hl:null,stream:null,raf:0,t0:0,lt:-1,lastDet:0,
+ rx:0,ry:0,rz:0,tx:0,ty:0,tz:0,px:0,py:0,qx:0,qy:0,s:1,ts:1,e:0,te:0,k:1,
+ mode:'none',ref:{},pin:[false,false],noHand:99,hist:[],lastSwipe:0,noMoveUntil:0,fistDone:false,gest:'',st:'',touch:new Map(),tdist:0};
 const HAND_MODEL='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const HAND_LINES=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+const GEN_SYS='Você gera modelos 3D simples a partir de formas primitivas. Responda SOMENTE com um JSON válido, sem texto antes ou depois e sem crases, neste formato: {"name":"NOME CURTO","parts":[{"t":"box","p":[0,0,0],"s":[1,1,1],"r":[0,0,0]}]}. Tipos permitidos em "t": box, sphere, cylinder, cone, torus. "p" é a posição [x,y,z] (y é para cima), "s" é a escala e "r" a rotação em graus. Para box, s é [largura,altura,profundidade]. Para cylinder e cone, s é [raio,altura,raio]. Para sphere, s são os três raios. Para torus, s é o raio nos três eixos. Use de 10 a 40 partes, bem posicionadas, para o objeto ficar reconhecível, centralizado na origem e cabendo em um cubo de lado 4.';
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+function setMsg(t){const m=$('d3_msg');m.textContent=t;m.style.display=t?'block':'none'}
+function setSt(t){if(d3.st!==t){d3.st=t;$('d3_state').textContent=t}}
+function setGest(t){if(d3.gest!==t){d3.gest=t;$('d3_gest').textContent=t}}
 function resize3D(){
+  const w=innerWidth,h=innerHeight,d=Math.min(devicePixelRatio||1,2);
+  const sk=$('d3_skel');sk.width=Math.round(w*d);sk.height=Math.round(h*d);
   if(!d3.ready)return;
-  const w=innerWidth,h=innerHeight;
-  d3.r.setPixelRatio(Math.min(devicePixelRatio||1,2));d3.r.setSize(w,h,false);
-  d3.cam.aspect=w/h;d3.cam.updateProjectionMatrix();d3.k=Math.min(1,(w/h)*1.7)*0.9;
+  d3.r.setPixelRatio(d);d3.r.setSize(w,h,false);
+  d3.cam.aspect=w/h;d3.cam.updateProjectionMatrix();d3.k=Math.min(1,(w/h)*1.7)*.9;
 }
 addEventListener('resize',()=>{if(d3.on)resize3D()});
-function buildModels(){
-  const T=d3.THREE,col=new T.Color(cfg.color);
-  const M=(o=.85)=>new T.MeshBasicMaterial({color:col,wireframe:true,transparent:true,opacity:o});
-  const W=()=>new T.MeshBasicMaterial({color:0xffffff,wireframe:true});
+const holoMat=(o=.85)=>new d3.THREE.MeshBasicMaterial({color:new d3.THREE.Color(cfg.color),wireframe:true,transparent:true,opacity:o});
+const whiteMat=()=>new d3.THREE.MeshBasicMaterial({color:0xffffff,wireframe:true});
+const solidMat=(o=.4)=>new d3.THREE.MeshBasicMaterial({color:new d3.THREE.Color(cfg.color),transparent:true,opacity:o,side:d3.THREE.DoubleSide});
+function builtIn(){
+  const T=d3.THREE,M=holoMat,W=whiteMat;
+  const mesh=(geo,mat,x=0,y=0,z=0,dir)=>{const m=new T.Mesh(geo,mat);m.position.set(x,y,z);if(dir)m.userData.dir=new T.Vector3(...dir);return m};
+  const grp=(x=0,y=0,z=0,dir)=>{const g=new T.Group();g.position.set(x,y,z);if(dir)g.userData.dir=new T.Vector3(...dir);return g};
   return [
-    {name:'REATOR',g(){const g=new T.Group();
-      g.add(new T.Mesh(new T.TorusGeometry(1.5,.16,10,48),M()));
-      g.add(new T.Mesh(new T.TorusGeometry(1,.1,10,40),M(.7)));
-      g.add(new T.Mesh(new T.IcosahedronGeometry(.5,1),W()));
-      for(let i=0;i<10;i++){const a=i/10*Math.PI*2,b=new T.Mesh(new T.BoxGeometry(.22,.5,.12),M(.6));b.position.set(Math.cos(a)*1.25,Math.sin(a)*1.25,0);b.rotation.z=a-Math.PI/2;g.add(b)}
-      return g}},
-    {name:'GLOBO',g(){const g=new T.Group();
-      g.add(new T.Mesh(new T.SphereGeometry(1.5,20,14),M(.7)));
-      for(let i=0;i<3;i++){const r=new T.Mesh(new T.TorusGeometry(1.8,.015,6,72),M(.9));r.rotation.set(i*Math.PI/3,i*.9,0);g.add(r)}
-      g.add(new T.Mesh(new T.IcosahedronGeometry(.4,1),W()));
-      return g}},
-    {name:'TESSERACT',g(){const g=new T.Group();
-      g.add(new T.Mesh(new T.BoxGeometry(2.4,2.4,2.4,2,2,2),M()));
-      const i=new T.Mesh(new T.BoxGeometry(1.2,1.2,1.2),W());g.add(i);
-      const m=new T.Mesh(new T.OctahedronGeometry(1.9),M(.4));g.add(m);
-      return g}},
-    {name:'NÓ QUÂNTICO',g(){const g=new T.Group();
-      g.add(new T.Mesh(new T.TorusKnotGeometry(1,.3,120,12,2,3),M()));
-      return g}}
+  {name:'REATOR',make(){const g=new T.Group();
+    g.add(mesh(new T.TorusGeometry(1.5,.16,10,48),M(.85),0,0,0,[0,0,-1.2]));
+    const r2=mesh(new T.TorusGeometry(1,.1,10,40),M(.7),0,0,0,[0,0,-.4]);r2.userData.spinZ=.8;g.add(r2);
+    g.add(mesh(new T.IcosahedronGeometry(.5,1),W(),0,0,0,[0,0,1.2]));
+    for(let i=0;i<10;i++){const a=i/10*Math.PI*2,b=mesh(new T.BoxGeometry(.22,.5,.12),M(.6),Math.cos(a)*1.25,Math.sin(a)*1.25,0);b.rotation.z=a-Math.PI/2;g.add(b)}
+    return g}},
+  {name:'GLOBO',make(){const g=new T.Group();
+    g.add(mesh(new T.SphereGeometry(1.5,20,14),M(.7),0,0,0,[0,0,0]));
+    for(let i=0;i<3;i++){const r=mesh(new T.TorusGeometry(1.8,.015,6,72),M(.9),0,0,0,[Math.cos(i*2.1),Math.sin(i*2.1),0]);r.rotation.set(i*Math.PI/3,i*.9,0);r.userData.spin=.4+i*.2;g.add(r)}
+    g.add(mesh(new T.IcosahedronGeometry(.4,1),W(),0,0,0,[0,0,0]));
+    return g}},
+  {name:'TESSERACT',make(){const g=new T.Group();
+    for(let x=-1;x<=1;x+=2)for(let y=-1;y<=1;y+=2)for(let z=-1;z<=1;z+=2)g.add(mesh(new T.BoxGeometry(1.15,1.15,1.15),M(.8),x*.6,y*.6,z*.6));
+    g.add(mesh(new T.BoxGeometry(.8,.8,.8),W(),0,0,0,[0,0,0]));
+    g.add(mesh(new T.OctahedronGeometry(1.9),M(.35),0,0,0,[0,0,0]));
+    g.userData.spinY=.25;return g}},
+  {name:'NÓ QUÂNTICO',make(){const g=new T.Group();
+    g.add(mesh(new T.TorusKnotGeometry(1,.3,120,12,2,3),M(.85),0,0,0,[0,0,0]));
+    for(let i=0;i<6;i++){const a=i/6*Math.PI*2;g.add(mesh(new T.IcosahedronGeometry(.18,0),W(),Math.cos(a)*2,Math.sin(a)*2,0))}
+    g.userData.spinY=.2;return g}},
+  {name:'DNA',make(){const g=new T.Group();
+    for(let i=0;i<28;i++){
+      const a=i*.45,y=(i-13.5)*.22,r=grp(0,y,0);r.rotation.y=-a;
+      r.add(mesh(new T.SphereGeometry(.09,8,6),M(.95),.7,0,0));
+      r.add(mesh(new T.SphereGeometry(.09,8,6),W(),-.7,0,0));
+      const c=mesh(new T.CylinderGeometry(.015,.015,1.4,6),M(.5));c.rotation.z=Math.PI/2;r.add(c);
+      g.add(r)}
+    g.userData.spinY=.5;return g}},
+  {name:'SISTEMA SOLAR',make(){const g=new T.Group();
+    g.add(mesh(new T.IcosahedronGeometry(.45,1),W(),0,0,0,[0,0,0]));
+    for(let i=0;i<6;i++){
+      const r=.9+i*.34,o=grp(0,0,0,[0,(i-2.5)*.45,0]);o.userData.spin=1.6/Math.pow(i+1,.7);
+      const ring=mesh(new T.RingGeometry(r-.006,r+.006,72),solidMat(.45));ring.rotation.x=-Math.PI/2;o.add(ring);
+      o.add(mesh(new T.IcosahedronGeometry(.07+.035*(i%3),1),M(.95),r,0,0));
+      g.add(o)}
+    g.rotation.x=.5;return g}},
+  {name:'TURBINA',make(){const g=new T.Group();
+    const rotor=grp(0,0,0,[0,0,.8]);rotor.userData.spinZ=1.8;
+    for(let i=0;i<8;i++){const a=i/8*Math.PI*2,b=mesh(new T.BoxGeometry(.2,1.1,.05),M(.8),Math.cos(a)*.95,Math.sin(a)*.95,0);b.rotation.z=a-Math.PI/2;b.rotation.x=.5;rotor.add(b)}
+    g.add(rotor);
+    const hub=mesh(new T.CylinderGeometry(.35,.35,.5,16),W(),0,0,0,[0,0,1.6]);hub.rotation.x=Math.PI/2;g.add(hub);
+    g.add(mesh(new T.TorusGeometry(1.75,.07,8,48),M(.7),0,0,0,[0,0,-1.4]));
+    return g}},
+  {name:'CIDADE',make(){const g=new T.Group();
+    let s=7;const rnd=()=>{s=(s*9301+49297)%233280;return s/233280};
+    for(let i=0;i<7;i++)for(let j=0;j<7;j++){const h=.25+rnd()*rnd()*2.2;g.add(mesh(new T.BoxGeometry(.4,h,.4),M(.75),(i-3)*.55,h/2-1.1,(j-3)*.55))}
+    const gp=mesh(new T.PlaneGeometry(4.2,4.2,8,8),M(.3),0,-1.1,0,[0,-1,0]);gp.rotation.x=-Math.PI/2;g.add(gp);
+    g.rotation.x=.45;g.userData.spinY=.2;return g}}
   ];
 }
-function setModel(i){
-  d3.idx=i;while(d3.grp.children.length)d3.grp.remove(d3.grp.children[0]);
-  d3.grp.add(d3.models[i].g());$('d3_name').textContent=d3.models[i].name;
+function prepare(g){
+  const T=d3.THREE;
+  g.children.forEach(c=>{
+    if(!c.userData.base)c.userData.base=c.position.clone();
+    if(!c.userData.dir){const b=c.userData.base;c.userData.dir=b.length()>.01?b.clone().normalize():new T.Vector3(0,0,1)}
+  });
 }
-function drawHands(hs){
-  const c=$('d3_hand'),g=c.getContext('2d');g.clearRect(0,0,c.width,c.height);g.fillStyle=cfg.color;
-  for(const h of hs)for(const p of h){g.beginPath();g.arc((1-p.x)*c.width,p.y*c.height,2.2,0,7);g.fill()}
+function fit(g,size=3.4){
+  const T=d3.THREE;g.updateMatrixWorld(true);
+  const box=new T.Box3().setFromObject(g),sz=box.getSize(new T.Vector3()),c=box.getCenter(new T.Vector3());
+  const f=size/(Math.max(sz.x,sz.y,sz.z)||1);
+  g.children.forEach(ch=>{ch.position.sub(c).multiplyScalar(f);ch.scale.multiplyScalar(f)});
 }
-async function open3D(){
-  if(d3.on)return;d3.on=true;wakeUp();
-  $('d3').classList.add('open');const msg=$('d3_msg');msg.style.display='block';msg.textContent='CARREGANDO 3D E RASTREADOR DE MÃO...';
+function setCurrent(i){
+  if(d3.cur)d3.grp.remove(d3.cur);
+  d3.idx=i;const it=d3.items[i],g=it.group||it.make();
+  prepare(g);d3.cur=g;d3.grp.add(g);d3.e=0;d3.te=0;
+  $('d3_name').textContent=it.name+'  ·  '+(i+1)+'/'+d3.items.length;
+}
+function addItem(name,group){
+  const custom=d3.items.filter(i=>i.group);
+  if(custom.length>=8)d3.items.splice(d3.items.indexOf(custom[0]),1);
+  d3.items.push({name,group});setCurrent(d3.items.length-1);
+}
+function step3D(dir){if(!d3.ready||!d3.items.length)return;setCurrent((d3.idx+dir+d3.items.length)%d3.items.length)}
+async function loadThree(){
+  if(d3.ready)return;
+  const THREE=await import('three');d3.THREE=THREE;
+  d3.r=new THREE.WebGLRenderer({canvas:$('d3_cv'),alpha:true,antialias:true});d3.r.setClearColor(0x000000,0);
+  d3.scene=new THREE.Scene();d3.cam=new THREE.PerspectiveCamera(50,1,.1,100);d3.cam.position.set(0,0,6);
+  d3.grp=new THREE.Group();d3.grp.rotation.order='YXZ';d3.scene.add(d3.grp);
+  const col=new THREE.Color(cfg.color);
+  for(let i=0;i<3;i++){const r=new THREE.Mesh(new THREE.RingGeometry(1.5+i*.55,1.53+i*.55,64),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.5-i*.12,side:THREE.DoubleSide}));r.rotation.x=-Math.PI/2;r.position.y=-2.5;d3.scene.add(r)}
+  const pts=new Float32Array(240*3);for(let i=0;i<240;i++){pts[i*3]=(Math.random()-.5)*9;pts[i*3+1]=(Math.random()-.5)*7;pts[i*3+2]=(Math.random()-.5)*6}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pts,3));
+  d3.dust=new THREE.Points(g,new THREE.PointsMaterial({color:col,size:.03,transparent:true,opacity:.6}));d3.scene.add(d3.dust);
+  d3.items=builtIn();d3.ready=true;
+}
+async function loadVision(){
+  if(d3.hl)return;
+  const base='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+  const vis=await import(base+'/vision_bundle.mjs');
+  const fs=await vis.FilesetResolver.forVisionTasks(base+'/wasm');
+  const opts=d=>({baseOptions:{modelAssetPath:HAND_MODEL,delegate:d},runningMode:'VIDEO',numHands:2});
+  try{d3.hl=await vis.HandLandmarker.createFromOptions(fs,opts('GPU'))}catch(e){d3.hl=await vis.HandLandmarker.createFromOptions(fs,opts('CPU'))}
+}
+function showPerm(msg,canAsk){
+  $('d3_permerr').textContent=msg||'';$('d3_allow').style.display=canAsk?'inline-block':'none';
+  $('d3_perm').classList.add('on');setSt('CÂMERA DESLIGADA · USE O TOQUE');
+}
+async function camFlow(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){showPerm('Este navegador não permite usar a câmera. Abra no Chrome. Você ainda pode controlar o holograma com o toque.',false);return}
+  let st='prompt';try{st=(await navigator.permissions.query({name:'camera'})).state}catch(e){}
+  if(st==='granted')startCam();
+  else if(st==='denied')showPerm('A câmera está bloqueada. Toque no cadeado ao lado do endereço → Permissões → Câmera → Permitir. Depois toque em PERMITIR CÂMERA.',true);
+  else showPerm('',true);
+}
+async function startCam(){
+  $('d3_perm').classList.remove('on');setMsg('ATIVANDO CÂMERA...');
   try{
-    if(!d3.ready){
-      const V='0.10.14';
-      const [THREE,vis]=await Promise.all([
-        import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js'),
-        import(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${V}/vision_bundle.mjs`)]);
-      const fs=await vis.FilesetResolver.forVisionTasks(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${V}/wasm`);
-      const opts=d=>({baseOptions:{modelAssetPath:HAND_MODEL,delegate:d},runningMode:'VIDEO',numHands:2});
-      let hl;try{hl=await vis.HandLandmarker.createFromOptions(fs,opts('GPU'))}catch(e){hl=await vis.HandLandmarker.createFromOptions(fs,opts('CPU'))}
-      d3.THREE=THREE;d3.hl=hl;
-      d3.r=new THREE.WebGLRenderer({canvas:$('d3_cv'),alpha:true,antialias:true});
-      d3.scene=new THREE.Scene();d3.cam=new THREE.PerspectiveCamera(50,1,.1,100);d3.cam.position.z=6;
-      d3.grp=new THREE.Group();d3.scene.add(d3.grp);d3.ready=true;
-    }
-    if(!d3.on)return;
-    resize3D();
-    const st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:640,height:480},audio:false});
+    const st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});
     if(!d3.on){st.getTracks().forEach(t=>t.stop());return}
     d3.stream=st;const v=$('d3_vid');v.srcObject=st;await v.play();
-    d3.models=buildModels();setModel(d3.idx);
-    msg.style.display='none';loop3D();
-  }catch(e){msg.textContent='ERRO: '+(e.message||e)+' — verifique a internet e a permissão da câmera.'}
+    $('d3_box').style.display='block';
+    setMsg('CARREGANDO RASTREADOR DE MÃO...');
+    await loadVision();
+    if(!d3.on)return;
+    d3.camOn=true;setMsg('');setSt('CÂMERA ATIVA · PROCURANDO MÃO...');
+  }catch(e){
+    setMsg('');
+    const denied=e&&(e.name==='NotAllowedError'||e.name==='SecurityError');
+    showPerm(denied?'Permissão negada. Toque no cadeado ao lado do endereço → Permissões → Câmera → Permitir. Depois toque em PERMITIR CÂMERA de novo.':'Não consegui iniciar a câmera ou o rastreador ('+(e.message||e.name||e)+'). Verifique a internet.',true);
+  }
+}
+async function open3D(){
+  if(d3.on)return;
+  d3.on=true;d3.mode='none';d3.noHand=99;wakeUp();
+  $('d3').classList.add('open');setMsg('CARREGANDO HOLOGRAMA...');setSt('INICIANDO...');setGest('');
+  try{
+    await loadThree();
+    if(!d3.on)return;
+    resize3D();if(!d3.cur)setCurrent(d3.idx);
+    setMsg('');d3.t0=performance.now();loop3D();
+    camFlow();
+  }catch(e){setMsg('ERRO: '+(e.message||e)+' — verifique a internet.')}
 }
 function close3D(){
-  d3.on=false;cancelAnimationFrame(d3.raf);
+  d3.on=false;d3.camOn=false;cancelAnimationFrame(d3.raf);
   if(d3.stream){d3.stream.getTracks().forEach(t=>t.stop());d3.stream=null}
+  $('d3_vid').srcObject=null;$('d3_box').style.display='none';$('d3_perm').classList.remove('on');setMsg('');
   $('d3').classList.remove('open');
+  const sk=$('d3_skel');sk.getContext('2d').clearRect(0,0,sk.width,sk.height);
+}
+function drawSkel(L){
+  const c=$('d3_skel'),g=c.getContext('2d'),W=c.width,H=c.height,sc=W/innerWidth;
+  g.clearRect(0,0,W,H);if(!L.length)return;
+  g.lineWidth=2*sc;g.strokeStyle=rgba(.85);g.fillStyle=rgba(1);g.shadowColor=cfg.color;g.shadowBlur=8;
+  L.forEach((lm,i)=>{
+    const X=j=>(1-lm[j].x)*W,Y=j=>lm[j].y*H;
+    g.beginPath();HAND_LINES.forEach(([a,b])=>{g.moveTo(X(a),Y(a));g.lineTo(X(b),Y(b))});g.stroke();
+    for(let j=0;j<21;j++){g.beginPath();g.arc(X(j),Y(j),(j===4||j===8?5:3)*sc,0,7);g.fill()}
+    if(d3.pin[i]){g.beginPath();g.fillStyle='#fff';g.arc((X(4)+X(8))/2,(Y(4)+Y(8))/2,12*sc,0,7);g.fill();g.fillStyle=rgba(1)}
+  });
+}
+function analyze(lm,i){
+  const vv=$('d3_vid'),asp=(vv&&vv.videoWidth&&vv.videoHeight)?vv.videoWidth/vv.videoHeight:4/3,P=j=>({x:1-lm[j].x,y:lm[j].y});
+  const dist=(a,b)=>Math.hypot((a.x-b.x)*asp,a.y-b.y);
+  const w=P(0),size=dist(w,P(9))||.1,ratio=dist(P(4),P(8))/size;
+  if(!d3.pin[i]&&ratio<.3)d3.pin[i]=true;else if(d3.pin[i]&&ratio>.45)d3.pin[i]=false;
+  let ext=0;[[8,6],[12,10],[16,14],[20,18]].forEach(([t,q])=>{if(dist(P(t),w)>dist(P(q),w)*1.08)ext++});
+  const p0=P(0),p5=P(5),p17=P(17),t4=P(4),t8=P(8);
+  return{p:{x:(p0.x+p5.x+p17.x)/3,y:(p0.y+p5.y+p17.y)/3},mid:{x:(t4.x+t8.x)/2,y:(t4.y+t8.y)/2},pinch:d3.pin[i],ext,open:ext>=3&&!d3.pin[i],fist:ext===0&&!d3.pin[i]};
+}
+function gestures(hs,now){
+  const asp=innerWidth/innerHeight,visH=2*6*Math.tan(25*Math.PI/180),visW=visH*asp;
+  const d2=(a,b)=>Math.hypot((a.x-b.x)*asp,a.y-b.y),ang=(a,b)=>Math.atan2(b.y-a.y,(b.x-a.x)*asp);
+  d3.noHand=hs.length?0:d3.noHand+1;
+  let mode='none',label='';
+  if(hs.length===1){const h=hs[0];mode=h.pinch?'grab':h.fist?'fist':h.open?'move':'hand'}
+  else if(hs.length>=2){const[a,b]=hs;mode=(a.pinch&&b.pinch)?'zoom':(a.open&&b.open)?'explode':'two'}
+  if(mode!==d3.mode){
+    d3.mode=mode;d3.ref={t0:now};d3.fistDone=false;d3.hist=[];
+    if(mode==='grab')d3.ref.last=hs[0].mid;
+    if(mode==='zoom'){const[a,b]=hs;d3.ref.d0=Math.max(.05,d2(a.mid,b.mid));d3.ref.s0=d3.ts;d3.ref.a0=ang(a.mid,b.mid);d3.ref.z0=d3.tz}
+  }
+  if(mode==='grab'){
+    const h=hs[0];d3.ty+=(h.mid.x-d3.ref.last.x)*3.2;d3.tx+=(h.mid.y-d3.ref.last.y)*2.4;d3.ref.last=h.mid;label='PINÇA · AGARRAR E GIRAR';
+  }else if(mode==='move'){
+    const h=hs[0];d3.hist.push({t:now,x:h.p.x});while(d3.hist.length&&now-d3.hist[0].t>280)d3.hist.shift();
+    const o=d3.hist[0],vx=d3.hist.length>2?(h.p.x-o.x)/((now-o.t)/1000):0;
+    if(Math.abs(vx)>1.7&&now-d3.lastSwipe>900){d3.lastSwipe=now;d3.noMoveUntil=now+700;d3.qx=0;d3.qy=0;d3.hist=[];step3D(vx>0?1:-1);label='DESLIZAR · TROCAR MODELO'}
+    else if(now>d3.noMoveUntil){d3.qx=(h.p.x-.5)*visW*.9;d3.qy=(.5-h.p.y)*visH*.9;label='MÃO ABERTA · MOVER'}
+    else label='DESLIZAR · TROCAR MODELO';
+  }else if(mode==='fist'){
+    label='PUNHO · SEGURE PARA REINICIAR';
+    if(now-d3.ref.t0>800&&!d3.fistDone){d3.fistDone=true;d3.tx=0;d3.ty=0;d3.tz=0;d3.qx=0;d3.qy=0;d3.ts=1;d3.te=0}
+    if(d3.fistDone)label='VISÃO REINICIADA';
+  }else if(mode==='zoom'){
+    const[a,b]=hs;d3.ts=clamp(d3.ref.s0*d2(a.mid,b.mid)/d3.ref.d0,.3,3.5);d3.tz=d3.ref.z0-(ang(a.mid,b.mid)-d3.ref.a0);label='DUAS PINÇAS · ESCALA E GIRO';
+  }else if(mode==='explode'){
+    const[a,b]=hs;d3.te=clamp((Math.hypot(a.p.x-b.p.x,a.p.y-b.p.y)-.3)/.4,0,1);label='VISTA EXPLODIDA · '+Math.round(d3.te*100)+'%';
+  }else if(mode==='two')label='DUAS MÃOS DETECTADAS';
+  else if(mode==='hand')label='MÃO DETECTADA';
+  setGest(label);
+  setSt(hs.length?('CÂMERA ATIVA · '+hs.length+(hs.length>1?' MÃOS DETECTADAS':' MÃO DETECTADA')):'CÂMERA ATIVA · PROCURANDO MÃO...');
+}
+function detect(now){
+  const v=$('d3_vid');
+  if(v.readyState<2||v.currentTime===d3.lt)return;d3.lt=v.currentTime;
+  let res=null;try{res=d3.hl.detectForVideo(v,now)}catch(e){return}
+  const L=(res&&res.landmarks)||[];
+  drawSkel(L);gestures(L.map(analyze),now);
 }
 function loop3D(){
-  if(!d3.on)return;d3.raf=requestAnimationFrame(loop3D);
-  const v=$('d3_vid');
-  if(v.readyState>=2&&v.currentTime!==d3.lt){
-    d3.lt=v.currentTime;
-    let res=null;try{res=d3.hl.detectForVideo(v,performance.now())}catch(e){}
-    const hs=(res&&res.landmarks)||[];
-    drawHands(hs);
-    const palm=h=>({x:(h[0].x+h[5].x+h[17].x)/3,y:(h[0].y+h[5].y+h[17].y)/3});
-    d3.noHand=hs.length?0:d3.noHand+1;
-    if(hs.length>=2){
-      const a=palm(hs[0]),b=palm(hs[1]);
-      d3.ts=Math.max(.4,Math.min(3,.3+Math.hypot(a.x-b.x,a.y-b.y)*4));
-    }else if(hs.length===1){
-      const h=hs[0],p=palm(h);
-      d3.ty=((1-p.x)-.5)*Math.PI*2.4;d3.tx=(p.y-.5)*Math.PI*1.4;
-      const size=Math.hypot(h[0].x-h[9].x,h[0].y-h[9].y)||1;
-      const pin=Math.hypot(h[4].x-h[8].x,h[4].y-h[8].y)/size<.28,now=performance.now();
-      if(pin&&!d3.pin&&now-d3.lastPin>1200){d3.lastPin=now;setModel((d3.idx+1)%d3.models.length)}
-      d3.pin=pin;
-    }else d3.pin=false;
-  }
-  if(d3.noHand>30)d3.ty+=0.01;
-  d3.ry+=(d3.ty-d3.ry)*.15;d3.rx+=(d3.tx-d3.rx)*.15;d3.s+=(d3.ts-d3.s)*.12;
-  d3.grp.rotation.set(d3.rx,d3.ry,0);d3.grp.scale.setScalar(d3.s*d3.k);
-  d3.r.render(d3.scene,d3.cam);
+  cancelAnimationFrame(d3.raf);
+  const step=()=>{
+    if(!d3.on)return;d3.raf=requestAnimationFrame(step);
+    const now=performance.now(),dt=Math.min(.06,(now-d3.t0)/1000);d3.t0=now;
+    if(d3.camOn&&d3.hl&&now-d3.lastDet>30){d3.lastDet=now;detect(now)}
+    if(d3.noHand>15&&d3.touch.size===0)d3.ty+=dt*.3;
+    const a=1-Math.exp(-dt*12);
+    d3.rx+=(d3.tx-d3.rx)*a;d3.ry+=(d3.ty-d3.ry)*a;d3.rz+=(d3.tz-d3.rz)*a;
+    d3.px+=(d3.qx-d3.px)*a;d3.py+=(d3.qy-d3.py)*a;d3.s+=(d3.ts-d3.s)*a;d3.e+=(d3.te-d3.e)*a;
+    const ex=d3.e*2.2;
+    if(d3.cur){
+      d3.cur.children.forEach(c=>{const u=c.userData;if(u.spin)c.rotation.y+=u.spin*dt;if(u.spinZ)c.rotation.z+=u.spinZ*dt;if(u.base)c.position.copy(u.base).addScaledVector(u.dir,ex)});
+      if(d3.cur.userData.spinY)d3.cur.rotation.y+=d3.cur.userData.spinY*dt;
+    }
+    d3.dust.rotation.y+=dt*.03;
+    d3.grp.position.set(d3.px,d3.py,0);d3.grp.rotation.set(d3.rx,d3.ry,d3.rz);d3.grp.scale.setScalar(d3.s*d3.k);
+    d3.r.render(d3.scene,d3.cam);
+  };
+  d3.t0=performance.now();step();
 }
+/* toque como alternativa à câmera */
+const d3cv=$('d3_cv');
+d3cv.addEventListener('pointerdown',e=>{try{d3cv.setPointerCapture(e.pointerId)}catch(x){}d3.touch.set(e.pointerId,{x:e.clientX,y:e.clientY});d3.tdist=0});
+d3cv.addEventListener('pointermove',e=>{
+  const p=d3.touch.get(e.pointerId);if(!p)return;
+  if(d3.touch.size===1){d3.ty+=(e.clientX-p.x)*.008;d3.tx+=(e.clientY-p.y)*.008}
+  p.x=e.clientX;p.y=e.clientY;
+  if(d3.touch.size===2){const[a,b]=[...d3.touch.values()],d=Math.hypot(a.x-b.x,a.y-b.y);if(d3.tdist)d3.ts=clamp(d3.ts*d/d3.tdist,.3,3.5);d3.tdist=d}
+});
+const d3up=e=>{d3.touch.delete(e.pointerId);d3.tdist=0};
+d3cv.addEventListener('pointerup',d3up);d3cv.addEventListener('pointercancel',d3up);
+/* criar modelos com IA */
+function buildParts(parts){
+  const T=d3.THREE,g=new T.Group();
+  if(!Array.isArray(parts)||!parts.length)throw new Error('modelo vazio');
+  const n3=(a,d)=>{const v=Array.isArray(a)?a:d;return[0,1,2].map(i=>Number.isFinite(+v[i])?+v[i]:d[i])};
+  parts.slice(0,60).forEach((pt,i)=>{
+    let geo;
+    switch(pt.t){case'sphere':geo=new T.SphereGeometry(1,14,10);break;case'cylinder':geo=new T.CylinderGeometry(1,1,1,16);break;case'cone':geo=new T.ConeGeometry(1,1,16);break;case'torus':geo=new T.TorusGeometry(1,.18,8,24);break;default:geo=new T.BoxGeometry(1,1,1)}
+    const m=new T.Mesh(geo,holoMat(.6+(i%4)*.1));
+    const s=n3(pt.s,[1,1,1]).map(v=>clamp(Math.abs(v)||.1,.02,8)),p=n3(pt.p,[0,0,0]).map(v=>clamp(v,-8,8)),r=n3(pt.r,[0,0,0]).map(v=>v*Math.PI/180);
+    m.scale.set(...s);m.position.set(...p);m.rotation.set(...r);g.add(m);
+  });
+  return g;
+}
+async function create3D(subject){
+  subject=String(subject).trim().slice(0,80);
+  if(!d3.on)await open3D();
+  if(!d3.ready)return false;
+  setMsg('CRIANDO "'+subject.toUpperCase()+'"...');
+  try{
+    const ans=await callAI(curAI(),[{role:'user',content:'Crie um modelo 3D de: '+subject}],GEN_SYS);
+    const j=JSON.parse(ans.slice(ans.indexOf('{'),ans.lastIndexOf('}')+1));
+    const g=buildParts(j.parts);fit(g);
+    addItem(String(j.name||subject).toUpperCase().slice(0,24),g);setMsg('');return true;
+  }catch(e){setMsg('');log('Não consegui criar o modelo: '+(e.message||e));return false}
+}
+function sendCreate(){const v=$('d3_txt').value.trim();if(!v)return;$('d3_txt').value='';$('d3_txt').blur();create3D(v)}
+/* abrir arquivo .glb ou imagem */
+$('d3_fi').onchange=async e=>{
+  const f=e.target.files[0];e.target.value='';if(!f||!d3.ready)return;
+  setMsg('CARREGANDO '+f.name.toUpperCase().slice(0,24)+'...');
+  try{
+    const T=d3.THREE,url=URL.createObjectURL(f),nm=f.name.replace(/\.[^.]+$/,'').toUpperCase().slice(0,24);
+    if(/\.(glb|gltf)$/i.test(f.name)){
+      const{GLTFLoader}=await import('three/addons/loaders/GLTFLoader.js');
+      const gltf=await new GLTFLoader().loadAsync(url),root=gltf.scene;root.updateMatrixWorld(true);
+      const meshes=[];root.traverse(o=>{if(o.isMesh)meshes.push(o)});
+      if(!meshes.length)throw new Error('o arquivo não tem malha 3D');
+      const g=new T.Group();
+      if(meshes.length<=400)meshes.forEach(m=>{m.material=holoMat(.7);g.attach(m)});
+      else{meshes.forEach(m=>{m.material=holoMat(.7)});g.add(root)}
+      fit(g);addItem(nm,g);
+    }else if(f.type.startsWith('image/')){
+      const tex=await new T.TextureLoader().loadAsync(url);tex.colorSpace=T.SRGBColorSpace;
+      const asp=tex.image.width/tex.image.height,w=asp>=1?3.4:3.4*asp,h=asp>=1?3.4/asp:3.4,g=new T.Group();
+      for(let i=0;i<3;i++){const pl=new T.Mesh(new T.PlaneGeometry(w,h),new T.MeshBasicMaterial({map:tex,transparent:true,opacity:.5,side:T.DoubleSide,blending:T.AdditiveBlending,depthWrite:false}));pl.position.z=(i-1)*.2;pl.userData.dir=new T.Vector3(0,0,(i-1)*1.2);g.add(pl)}
+      const fr=new T.LineSegments(new T.EdgesGeometry(new T.PlaneGeometry(w,h)),new T.LineBasicMaterial({color:new T.Color(cfg.color)}));fr.userData.dir=new T.Vector3(0,0,0);g.add(fr);
+      addItem(nm,g);
+    }else throw new Error('use um arquivo .glb ou uma imagem');
+    setMsg('');
+  }catch(err){setMsg('');log('Não consegui abrir o arquivo: '+(err.message||err))}
+};
+$('d3_prev').onclick=()=>step3D(-1);$('d3_next').onclick=()=>step3D(1);
+$('d3_file').onclick=()=>$('d3_fi').click();
+$('d3_go').onclick=sendCreate;$('d3_txt').addEventListener('keydown',e=>{if(e.key==='Enter')sendCreate()});
+$('d3_allow').onclick=startCam;$('d3_skip').onclick=()=>$('d3_perm').classList.remove('on');
 $('b3d').onclick=open3D;
 $('d3_close').onclick=close3D;
 
@@ -536,25 +789,26 @@ const PROV={
 const aiReady=()=>true;
 const curAI=()=>{const p=PROV[cfg.ai];return (p&&cfg.ai!=='none'&&p.key().trim())?cfg.ai:'free'};
 const sysPrompt=()=>cfg.persona.replace(/\{name\}/g,cfg.name).replace(/\{user\}/g,cfg.user);
-async function callAI(prov,msgs){
+async function callAI(prov,msgs,sys){
+  const SP=sys||sysPrompt();
   const key=PROV[prov].key().trim(),model=PROV[prov].model().trim();
   if(prov==='free'){
     const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),20000);
     try{
-      const r=await fetch('https://text.pollinations.ai/openai',{method:'POST',headers:{'Content-Type':'application/json'},signal:ctl.signal,body:JSON.stringify({model:'openai',messages:[{role:'system',content:sysPrompt()},...msgs]})});
+      const r=await fetch('https://text.pollinations.ai/openai',{method:'POST',headers:{'Content-Type':'application/json'},signal:ctl.signal,body:JSON.stringify({model:'openai',messages:[{role:'system',content:SP},...msgs]})});
       if(!r.ok)throw new Error('IA grátis indisponível ('+r.status+')');
       const j=await r.json();const t=j.choices?.[0]?.message?.content;
       if(!t)throw new Error('sem resposta');return t;
     }finally{clearTimeout(to)}
   }
   if(prov==='gemini'){
-    const body={systemInstruction:{parts:[{text:sysPrompt()}]},contents:msgs.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))};
+    const body={systemInstruction:{parts:[{text:SP}]},contents:msgs.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))};
     const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)});
     const j=await r.json();if(!r.ok)throw new Error(j.error?.message||r.status);
     return j.candidates?.[0]?.content?.parts?.map(p=>p.text).join('')||'(sem resposta)';
   }
   const url=prov==='openai'?'https://api.openai.com/v1/chat/completions':'https://api.x.ai/v1/chat/completions';
-  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify({model,messages:[{role:'system',content:sysPrompt()},...msgs]})});
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify({model,messages:[{role:'system',content:SP},...msgs]})});
   const j=await r.json();if(!r.ok)throw new Error(j.error?.message||(typeof j.error==='string'?j.error:r.status));
   return j.choices?.[0]?.message?.content||'(sem resposta)';
 }

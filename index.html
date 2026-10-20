@@ -181,7 +181,10 @@ body:not(.awake) #clock{opacity:.8}
   <h3 style="margin-top:26px">INTELIGÊNCIA (IA)</h3>
   <label>IA padrão (responde o que não for comando)</label>
   <select id="s_ai">
+    <option value="brain">CÉREBRO COMBINADO (todas as IAs juntas)</option>
     <option value="none">Jarvis grátis (sem chave)</option>
+    <option value="claude">Claude (Anthropic)</option>
+    <option value="astra">GPT Astra (personalizado)</option>
     <option value="gemini">Gemini (Google)</option>
     <option value="openai">ChatGPT (OpenAI)</option>
     <option value="grok">Grok (xAI)</option>
@@ -193,7 +196,12 @@ body:not(.awake) #clock{opacity:.8}
   <label>Modelo do ChatGPT</label><input id="s_mOpenai">
   <label>Chave de API do Grok</label><input id="s_kGrok" type="password" autocomplete="off">
   <label>Modelo do Grok</label><input id="s_mGrok">
-  <small>Se der erro de modelo, troque o nome do modelo pelo que está disponível na sua conta.</small>
+  <label>Chave de API do Claude</label><input id="s_kClaude" type="password" autocomplete="off">
+  <label>Modelo do Claude</label><input id="s_mClaude">
+  <label>GPT Astra · endereço da API (compatível com OpenAI)</label><input id="s_uAstra" placeholder="https://.../v1/chat/completions">
+  <label>GPT Astra · chave</label><input id="s_kAstra" type="password" autocomplete="off">
+  <label>GPT Astra · modelo</label><input id="s_mAstra">
+  <small>CÉREBRO COMBINADO: pergunta para todas as IAs que tiverem chave, ao mesmo tempo, e uma delas junta o melhor de cada resposta. Quanto mais chaves, mais forte. Se der erro de modelo, troque o nome do modelo pelo que está disponível na sua conta.</small>
   <label>Personalidade da IA (use {name} e {user})</label>
   <textarea id="s_persona" style="min-height:130px"></textarea>
 
@@ -217,7 +225,7 @@ if(NO_TTS){
   window.SpeechSynthesisUtterance=function(t){this.text=t};
 }
 const DEFAULT={name:'Jarvis',user:'senhor',voice:'',rate:0.94,pitch:0.7,color:'#00d0ff',mode:'clap',claps:1,sens:55,
- greet:'Pois não, {user}?',ai:'none',ttsVoice:'none',introFull:'start',kGemini:'',kOpenai:'',kGrok:'',mGemini:'gemini-2.0-flash',mOpenai:'gpt-4o-mini',mGrok:'grok-3-mini',
+ greet:'Pois não, {user}?',ai:'none',ttsVoice:'none',introFull:'start',kGemini:'',kOpenai:'',kGrok:'',kClaude:'',mClaude:'claude-sonnet-5-5',kAstra:'',uAstra:'',mAstra:'',mGemini:'gemini-2.0-flash',mOpenai:'gpt-4o-mini',mGrok:'grok-3-mini',
  persona:'Você é {name}, um assistente pessoal inspirado no J.A.R.V.I.S. dos filmes dos Vingadores. Responda sempre em português do Brasil, de forma educada, elegante e com leve humor sutil. Chame o usuário de {user}. Dê respostas curtas e diretas, pois serão faladas em voz alta, a menos que peçam código ou uma explicação longa. Ao escrever código, use blocos de código com três crases.',
  custom:'modo festa => Protocolo festa iniciado, {user}. => https://www.youtube.com/results?search_query=musica+para+festa'};
 let cfg;try{cfg=Object.assign({},DEFAULT,JSON.parse(localStorage.getItem('jarvis_cfg')||'{}'))}catch(e){cfg=Object.assign({},DEFAULT)}
@@ -374,9 +382,9 @@ function handle(raw){
     if(p.length>=2&&p[0]&&t.includes(norm(p[0]))){say(p[1].replace('{user}',U));if(p[2])openUrl(p[2]);return}
   }
   let m;
-  if((m=t.match(/(?:usar|use|usa|trocar para|mudar para) (?:o |a )?(gemini|chat ?gpt|gpt|openai|grok)/))){
-    const k=m[1]==='gemini'?'gemini':m[1]==='grok'?'grok':'openai';
-    if(!PROV[k].key().trim()){say(`Falta a chave de API do ${PROV[k].name}. Configure na engrenagem.`);return}
+  if((m=t.match(/(?:usar|use|usa|trocar para|mudar para) (?:o |a )?(gemini|chat ?gpt|gpt astra|gpt|openai|grok|claude|astra|cerebro|todas as ias|todas)/))){
+    const k=/gemini/.test(m[1])?'gemini':/grok/.test(m[1])?'grok':/claude/.test(m[1])?'claude':/astra/.test(m[1])?'astra':/cerebro|todas/.test(m[1])?'brain':'openai';
+    if(k!=='brain'&&!PROV[k].key().trim()){say(`Falta a chave de API do ${PROV[k].name}. Configure na engrenagem.`);return}
     cfg.ai=k;save();applyCfg();say(`Certo, ${U}. Agora estou usando o ${PROV[k].name}.`);return}
   if(/(limpar|apagar|esquecer) (a )?(conversa|memoria)/.test(t)){hist=[];say('Conversa reiniciada.');return}
   if(/(fechar|sair d[oe]|encerrar) (o )?(3d|holograma|modo 3d|modelo)/.test(t)){close3D();say('Holograma encerrado.');return}
@@ -834,12 +842,36 @@ const PROV={
   openai:{name:'ChatGPT',key:()=>cfg.kOpenai||'',model:()=>cfg.mOpenai},
   gemini:{name:'Gemini',key:()=>cfg.kGemini||'',model:()=>cfg.mGemini},
   grok:{name:'Grok',key:()=>cfg.kGrok||'',model:()=>cfg.mGrok},
+  claude:{name:'Claude',key:()=>cfg.kClaude||'',model:()=>cfg.mClaude},
+  astra:{name:'GPT Astra',key:()=>cfg.kAstra||'',model:()=>cfg.mAstra},
+  brain:{name:'Cérebro',key:()=>'brain',model:()=>''},
   free:{name:'Jarvis',key:()=>'free',model:()=>''}};
+const KEYED=['claude','gemini','openai','grok','astra'];
+const keyed=()=>KEYED.filter(k=>PROV[k].key().trim()&&(k!=='astra'||(cfg.uAstra||'').trim()));
+let lastBrain='';
 const aiReady=()=>true;
-const curAI=()=>{const p=PROV[cfg.ai];return (p&&cfg.ai!=='none'&&p.key().trim())?cfg.ai:'free'};
+const curAI=()=>{
+  if(cfg.ai==='brain')return keyed().length?'brain':'free';
+  const p=PROV[cfg.ai];return (p&&cfg.ai!=='none'&&p.key().trim()&&(cfg.ai!=='astra'||(cfg.uAstra||'').trim()))?cfg.ai:'free'};
 const sysPrompt=()=>cfg.persona.replace(/\{name\}/g,cfg.name).replace(/\{user\}/g,cfg.user);
+const tmo=(p,ms)=>Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error('demorou demais')),ms))]);
 async function callAI(prov,msgs,sys){
   const SP=sys||sysPrompt();
+  if(prov==='brain'){
+    const ks=keyed();
+    if(!ks.length)return callAI('free',msgs,sys);
+    if(sys||ks.length===1){lastBrain=PROV[ks[0]].name;return callAI(ks[0],msgs,sys)}   /* tarefas internas e chave única: sem mistura */
+    const rs=await Promise.allSettled(ks.map(k=>tmo(callAI(k,msgs,sys),30000)));
+    const ok=ks.map((k,i)=>({k,v:rs[i].status==='fulfilled'?String(rs[i].value||'').trim():''})).filter(x=>x.v);
+    if(!ok.length){const e=rs.find(r=>r.status==='rejected');throw e?e.reason:new Error('nenhuma IA respondeu')}
+    lastBrain=ok.map(x=>PROV[x.k].name).join(' + ');
+    if(ok.length===1)return ok[0].v;
+    const q0=[...msgs].reverse().find(m=>m.role==='user').content;
+    const chair=ok[0].k;
+    const merge=`Pergunta do usuário: ${q0}\n\nAs respostas de ${ok.length} assistentes de IA:\n\n`+ok.map((x,i)=>`### Resposta ${i+1} (${PROV[x.k].name})\n${x.v}`).join('\n\n')+`\n\nJunte o melhor de cada resposta em UMA resposta final: corrija erros, resolva contradições (prefira o que estiver correto), mantenha código completo se houver, e responda no seu estilo normal e direto. Não mencione que existiram várias respostas.`;
+    try{return await tmo(callAI(chair,[{role:'user',content:merge}],sys),30000)}
+    catch(e){return ok[0].v}
+  }
   const key=PROV[prov].key().trim(),model=PROV[prov].model().trim();
   if(prov==='free'){
     const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),20000);
@@ -856,7 +888,12 @@ async function callAI(prov,msgs,sys){
     const j=await r.json();if(!r.ok)throw new Error(j.error?.message||r.status);
     return j.candidates?.[0]?.content?.parts?.map(p=>p.text).join('')||'(sem resposta)';
   }
-  const url=prov==='openai'?'https://api.openai.com/v1/chat/completions':'https://api.x.ai/v1/chat/completions';
+  if(prov==='claude'){
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:model||'claude-sonnet-5-5',max_tokens:2048,system:SP,messages:msgs})});
+    const j=await r.json();if(!r.ok)throw new Error(j.error?.message||r.status);
+    return (j.content||[]).map(c=>c.text||'').join('')||'(sem resposta)';
+  }
+  const url=prov==='openai'?'https://api.openai.com/v1/chat/completions':prov==='astra'?(cfg.uAstra||'').trim():'https://api.x.ai/v1/chat/completions';
   const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify({model,messages:[{role:'system',content:SP},...msgs]})});
   const j=await r.json();if(!r.ok)throw new Error(j.error?.message||(typeof j.error==='string'?j.error:r.status));
   return j.choices?.[0]?.message?.content||'(sem resposta)';
@@ -905,7 +942,7 @@ async function askAI(text){
     try{ans=await callAI(prov,hist)}
     catch(e){if(prov==='free'){ans=await wikiAnswer(text)}else throw e}
     hist.push({role:'assistant',content:ans});thinking=false;
-    showAns(ans,PROV[prov].name.toUpperCase());
+    showAns(ans,prov==='brain'?('CÉREBRO · '+lastBrain).toUpperCase():PROV[prov].name.toUpperCase());
     let spoken=ans.replace(/```[\s\S]*?```/g,' ').replace(/[*#`_>]/g,'').replace(/\s+/g,' ').trim();
     if(spoken.length>600){spoken=spoken.slice(0,600);const i=spoken.lastIndexOf('. ');if(i>200)spoken=spoken.slice(0,i+1)}
     if(/```/.test(ans))spoken=(spoken?spoken.slice(0,300)+' ':'')+'O código está na tela.';
@@ -913,7 +950,7 @@ async function askAI(text){
   }catch(e){
     thinking=false;hist.pop();
     log('Erro: '+e.message);
-    say(prov==='free'?`Não consegui uma resposta agora, ${cfg.user}. Verifique a internet e tente de novo.`:`Não consegui falar com o ${PROV[prov].name}. Veja a chave e o modelo na engrenagem.`);
+    say(prov==='free'?`Não consegui uma resposta agora, ${cfg.user}. Verifique a internet e tente de novo.`:`Não consegui falar com o ${PROV[prov].name}. Veja as chaves e os modelos na engrenagem.`);
   }
 }
 const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -960,7 +997,7 @@ function applyCfg(){
   $('s_name').value=cfg.name;$('s_user').value=cfg.user;$('s_rate').value=cfg.rate;$('s_pitch').value=cfg.pitch;
   $('s_color').value=cfg.color;$('s_mode').value=cfg.mode;$('s_claps').value=cfg.claps;$('s_sens').value=cfg.sens;
   $('s_greet').value=cfg.greet;$('s_custom').value=cfg.custom;
-  $('s_ai').value=cfg.ai;$('s_kGemini').value=cfg.kGemini;$('s_mGemini').value=cfg.mGemini;$('s_kOpenai').value=cfg.kOpenai;$('s_mOpenai').value=cfg.mOpenai;$('s_kGrok').value=cfg.kGrok;$('s_mGrok').value=cfg.mGrok;$('s_persona').value=cfg.persona;$('s_tts').value=cfg.ttsVoice;$('s_intro').value=cfg.introFull;
+  $('s_ai').value=cfg.ai;$('s_kGemini').value=cfg.kGemini;$('s_mGemini').value=cfg.mGemini;$('s_kOpenai').value=cfg.kOpenai;$('s_mOpenai').value=cfg.mOpenai;$('s_kGrok').value=cfg.kGrok;$('s_mGrok').value=cfg.mGrok;$('s_kClaude').value=cfg.kClaude;$('s_mClaude').value=cfg.mClaude;$('s_kAstra').value=cfg.kAstra;$('s_uAstra').value=cfg.uAstra;$('s_mAstra').value=cfg.mAstra;$('s_persona').value=cfg.persona;$('s_tts').value=cfg.ttsVoice;$('s_intro').value=cfg.introFull;
   $('v_name').textContent='Voz atual: '+(cfg.voice||'padrão do aparelho');$('v_rate').textContent=(+cfg.rate).toFixed(2);$('v_pitch').textContent=(+cfg.pitch).toFixed(2);$('v_sens').textContent=cfg.sens;
 }
 const bind=(id,key,conv=x=>x,after)=>$(id).addEventListener('input',()=>{cfg[key]=conv($(id).value);save();applyCfg();after&&after()});
@@ -970,6 +1007,7 @@ bind('s_ai','ai');bind('s_tts','ttsVoice');bind('s_intro','introFull');bind('s_p
 bind('s_kGemini','kGemini',v=>v.trim());bind('s_mGemini','mGemini',v=>v.trim());
 bind('s_kOpenai','kOpenai',v=>v.trim());bind('s_mOpenai','mOpenai',v=>v.trim());
 bind('s_kGrok','kGrok',v=>v.trim());bind('s_mGrok','mGrok',v=>v.trim());
+bind('s_kClaude','kClaude',v=>v.trim());bind('s_mClaude','mClaude',v=>v.trim());bind('s_kAstra','kAstra',v=>v.trim());bind('s_uAstra','uAstra',v=>v.trim());bind('s_mAstra','mAstra',v=>v.trim());
 bind('s_claps','claps',Number);bind('s_sens','sens',Number);bind('s_greet','greet');bind('s_custom','custom');
 bind('s_mode','mode',x=>x,()=>{if(active){pauseAll();resume()}});
 $('gear').onclick=()=>$('panel').classList.add('open');

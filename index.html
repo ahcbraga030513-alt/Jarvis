@@ -436,18 +436,42 @@ tickClock();setInterval(tickClock,1000);
 
 /* ---------- abertura original (som sintetizado + animação) ---------- */
 function introSound(){
+  /* ronco sintetizado de um V12 esportivo (estilo supercarro): partida, marcha lenta, duas aceleradas e estouros no escapamento */
   try{
     const A=new(window.AudioContext||window.webkitAudioContext)();A.resume&&A.resume();
-    const t=A.currentTime,out=A.createGain();out.gain.value=.4;out.connect(A.destination);
-    const o=A.createOscillator(),f=A.createBiquadFilter(),g=A.createGain();
-    o.type='sawtooth';o.frequency.setValueAtTime(50,t);o.frequency.exponentialRampToValueAtTime(260,t+3.2);
-    f.type='lowpass';f.frequency.setValueAtTime(150,t);f.frequency.exponentialRampToValueAtTime(3000,t+3.2);
-    g.gain.setValueAtTime(.001,t);g.gain.exponentialRampToValueAtTime(.3,t+2.8);g.gain.exponentialRampToValueAtTime(.001,t+4);
-    o.connect(f);f.connect(g);g.connect(out);o.start(t);o.stop(t+4.1);
-    const tone=(fr,st,d,v)=>{const s=A.createOscillator(),e=A.createGain();s.type='sine';s.frequency.value=fr;e.gain.setValueAtTime(v,t+st);e.gain.exponentialRampToValueAtTime(.001,t+st+d);s.connect(e);e.connect(out);s.start(t+st);s.stop(t+st+d+.05)};
-    for(let i=0;i<5;i++)tone(900+i*220,.5+i*.65,.09,.18);
-    [392,587,784,1175].forEach(fr=>tone(fr,3.3,1.3,.14));
-    setTimeout(()=>{try{A.close()}catch(e){}},6500);
+    const t=A.currentTime,out=A.createGain();out.gain.value=.55;
+    const comp=A.createDynamicsCompressor();out.connect(comp);comp.connect(A.destination);
+    const k=new Float32Array(1024);for(let i=0;i<1024;i++){const x=i/512-1;k[i]=Math.tanh(x*3.2)}
+    const ws=A.createWaveShaper();ws.curve=k;ws.oversample='2x';
+    const lp=A.createBiquadFilter();lp.type='lowpass';lp.Q.value=1.2;
+    const eg=A.createGain();
+    ws.connect(lp);lp.connect(eg);eg.connect(out);
+    /* rpm -> frequencia de ignicao de um V12 (6 explosoes por rotacao) */
+    const rpm=[[0,0],[.05,250],[.45,330],[.55,900],[1.0,850],[1.25,3200],[1.8,7600],[2.0,5200],[2.15,3000],[2.45,2900],[2.6,3600],[3.2,8300],[3.45,8300],[3.55,5600],[3.8,1800],[4.2,900]];
+    const fq=r=>Math.max(8,r/60*6);
+    const mk=(type,mul,vol)=>{
+      const o=A.createOscillator(),g=A.createGain();o.type=type;g.gain.value=vol;
+      o.frequency.setValueAtTime(fq(rpm[0][1]||100)*mul,t);
+      rpm.forEach(([ts,r])=>o.frequency.linearRampToValueAtTime(fq(r||100)*mul,t+ts));
+      o.connect(g);g.connect(ws);o.start(t);o.stop(t+4.3);
+    };
+    mk('sawtooth',.5,.55);mk('sawtooth',1,.5);mk('square',2,.18);mk('sawtooth',3.02,.12);
+    /* filtro abre com a rotacao */
+    lp.frequency.setValueAtTime(300,t);
+    rpm.forEach(([ts,r])=>lp.frequency.linearRampToValueAtTime(250+r*0.55,t+ts));
+    /* envelope geral */
+    eg.gain.setValueAtTime(.0001,t);eg.gain.linearRampToValueAtTime(.5,t+.06);eg.gain.linearRampToValueAtTime(.8,t+.6);
+    eg.gain.linearRampToValueAtTime(1,t+3.2);eg.gain.linearRampToValueAtTime(.6,t+3.8);eg.gain.exponentialRampToValueAtTime(.001,t+4.25);
+    /* tremulo grave de marcha lenta (motor "trabalhando") */
+    const lf=A.createOscillator(),lg=A.createGain();lf.frequency.value=11;lg.gain.value=.12;lf.connect(lg);lg.connect(eg.gain);lf.start(t);lf.stop(t+4.3);
+    /* ruido de escapamento + estouros na desaceleracao */
+    const nb=A.createBuffer(1,A.sampleRate*.2,A.sampleRate),nd=nb.getChannelData(0);for(let i=0;i<nd.length;i++)nd[i]=(Math.random()*2-1)*Math.pow(1-i/nd.length,2);
+    const pop=(st,v)=>{const n=A.createBufferSource(),bp=A.createBiquadFilter(),g=A.createGain();n.buffer=nb;bp.type='bandpass';bp.frequency.value=500+Math.random()*1400;bp.Q.value=.8;g.gain.value=v;n.connect(bp);bp.connect(g);g.connect(out);n.start(t+st)};
+    [2.2,2.3,3.62,3.7,3.78,3.9,3.98,4.1].forEach((st,i)=>pop(st,.7-i*.04));
+    /* partida: motor de arranque */
+    const cr=A.createOscillator(),cg=A.createGain();cr.type='sawtooth';cr.frequency.setValueAtTime(40,t);cr.frequency.linearRampToValueAtTime(70,t+.5);
+    cg.gain.setValueAtTime(.12,t);cg.gain.linearRampToValueAtTime(.001,t+.55);cr.connect(cg);cg.connect(out);cr.start(t);cr.stop(t+.6);
+    setTimeout(()=>{try{A.close()}catch(e){}},5500);
   }catch(e){}
 }
 function playIntro(cb){
@@ -457,8 +481,8 @@ function playIntro(cb){
   const L=['INICIALIZANDO NÚCLEO...','CALIBRANDO SENSORES...','CARREGANDO PROTOCOLOS DE VOZ...','CONECTANDO MÓDULOS DE IA...',cfg.name.toUpperCase()+' ONLINE'];
   L.forEach((s,i)=>setTimeout(()=>{const d=document.createElement('div');d.textContent='> '+s;b.appendChild(d)},500+i*650));
   introSound();
-  setTimeout(()=>{b.classList.remove('on');setTimeout(()=>{b.innerHTML=''},700)},4200);
-  setTimeout(cb,4300);
+  setTimeout(()=>{b.classList.remove('on');setTimeout(()=>{b.innerHTML=''},700)},4300);
+  setTimeout(cb,4400);
 }
 
 /* ---------- holograma 3D controlado por gestos ---------- */

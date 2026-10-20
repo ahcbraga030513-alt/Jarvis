@@ -59,7 +59,16 @@ body:not(.awake) #hud{opacity:.15;transform:scale(.85)}
 body:not(.awake) #status,body:not(.awake) #log,body:not(.awake) #bar{opacity:0;pointer-events:none}
 #clock{position:fixed;left:0;right:0;top:36%;transform:translateY(-50%);text-align:center;font-size:44px;letter-spacing:.2em;opacity:0;transition:opacity .6s;z-index:4;text-shadow:0 0 14px var(--c);pointer-events:none}
 body:not(.awake) #clock{opacity:.8}
-#b3d{font-size:13px;padding:7px 12px}
+#b3d,#bcore{font-size:13px;padding:7px 12px}
+#cores{position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top) + 54px);z-index:19;background:rgba(2,12,18,.97);border:1px solid var(--c);border-radius:10px;padding:12px;display:none;box-shadow:0 0 24px rgba(0,208,255,.25);max-height:75vh;overflow:auto}
+#cores.open{display:block}
+#cores h4{margin:0 0 8px;font-family:'Orbitron';font-size:12px;letter-spacing:.2em;color:var(--c);font-weight:400}
+.core{display:flex;align-items:center;gap:10px;padding:11px 10px;margin:6px 0;border:1px solid rgba(0,208,255,.3);border-radius:8px;cursor:pointer;font-family:system-ui,sans-serif;color:#dff}
+.core .dot{width:10px;height:10px;border-radius:50%;background:#555;flex:none}
+.core.on .dot{background:#3dff9a;box-shadow:0 0 8px #3dff9a}
+.core.sel{border-color:var(--c);background:rgba(0,208,255,.14);box-shadow:0 0 12px rgba(0,208,255,.35)}
+.core b{flex:1;font-weight:600;letter-spacing:.06em}.core i{font-style:normal;font-size:11px;color:#8bb}
+#cores small{margin-top:8px}
 #boot{position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:15;display:flex;flex-direction:column;justify-content:center;padding:0 10%;font-size:13px;letter-spacing:.15em;line-height:2.2;opacity:0;pointer-events:none;transition:opacity .6s}
 #boot.on{opacity:1}
 #d3{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 45%,#04141c 0%,#000 75%);z-index:12;display:none}
@@ -118,12 +127,13 @@ body:not(.awake) #clock{opacity:.8}
   <div id="d3_hint">PUNHO: SEGURA E MOVE<br>PINÇA: ZOOM (AFASTE OS DEDOS)<br>1 DEDO: GIRA<br>2 MÃOS ABRINDO: DESMONTA<br>2 MÃOS FECHANDO: MONTA<br>DESLIZAR MÃO ABERTA: TROCA</div>
   <button id="d3_close">FECHAR</button>
 </div>
-<div id="top"><span id="title">JARVIS</span><span><button id="b3d">3D</button> <button id="gear">⚙</button></span></div>
+<div id="top"><span id="title">JARVIS</span><span><button id="bcore">IA</button> <button id="b3d">3D</button> <button id="gear">⚙</button></span></div>
 <div id="status">OFFLINE</div>
 <div id="log"></div>
 <div id="bar"><input id="txt" placeholder="Escreva um comando ou pergunta..." autocomplete="off"><button id="b_send">▶</button></div>
 <button id="power">INICIAR</button>
 
+<div id="cores"><h4>NÚCLEOS DE INTELIGÊNCIA</h4><div id="cores_list"></div><small>Toque num núcleo para usar. Verde = chave configurada. O CÉREBRO junta todos os núcleos verdes numa resposta só.</small><div class="row"><button id="cores_cfg">CONFIGURAR CHAVES</button><button id="cores_close">FECHAR</button></div></div>
 <div id="ans"><div id="ans_head"><span id="ans_who">IA</span><button id="ans_close">FECHAR</button></div><div id="ans_body"></div></div>
 
 <div id="panel">
@@ -991,7 +1001,24 @@ function fillVoices(){
   $('s_voice').value=cfg.voice;
 }
 speechSynthesis.onvoiceschanged=fillVoices;
-function applyCfg(){
+function renderCores(){
+  const L=$('cores_list');if(!L)return;
+  const cur=curAI(),n=keyed().length;
+  const rows=[['brain','CÉREBRO COMBINADO',n>1?n+' núcleos juntos':n===1?'só 1 núcleo ativo':'sem chaves',n>0]].concat(KEYED.map(k=>[k,PROV[k].name.toUpperCase(),PROV[k].model()||'',keyed().includes(k)])).concat([['free','JARVIS GRÁTIS','sem chave',true]]);
+  L.innerHTML='';
+  rows.forEach(([k,nm,sub,on])=>{
+    const d=document.createElement('div');d.className='core'+(on?' on':'')+(cur===k?' sel':'');
+    d.innerHTML='<span class="dot"></span><b>'+nm+'</b><i>'+(cur===k?'EM USO':sub)+'</i>';
+    d.onclick=()=>{
+      if(!on){$('cores').classList.remove('open');$('panel').classList.add('open');say('Falta a chave desse núcleo. Coloque na engrenagem.');return}
+      cfg.ai=k==='free'?'none':k;save();applyCfg();renderCores();
+      say(k==='brain'?'Cérebro combinado ativado.':'Agora estou usando o núcleo '+PROV[k].name+'.');
+    };
+    L.appendChild(d);
+  });
+  const b=$('bcore');if(b)b.textContent='IA';
+}
+function applyCfg(){try{renderCores()}catch(e){}
   document.documentElement.style.setProperty('--c',cfg.color);
   $('title').textContent=cfg.name.toUpperCase().split('').join(' ');
   $('s_name').value=cfg.name;$('s_user').value=cfg.user;$('s_rate').value=cfg.rate;$('s_pitch').value=cfg.pitch;
@@ -1010,6 +1037,9 @@ bind('s_kGrok','kGrok',v=>v.trim());bind('s_mGrok','mGrok',v=>v.trim());
 bind('s_kClaude','kClaude',v=>v.trim());bind('s_mClaude','mClaude',v=>v.trim());bind('s_kAstra','kAstra',v=>v.trim());bind('s_uAstra','uAstra',v=>v.trim());bind('s_mAstra','mAstra',v=>v.trim());
 bind('s_claps','claps',Number);bind('s_sens','sens',Number);bind('s_greet','greet');bind('s_custom','custom');
 bind('s_mode','mode',x=>x,()=>{if(active){pauseAll();resume()}});
+$('bcore').onclick=()=>{renderCores();$('cores').classList.toggle('open')};
+$('cores_close').onclick=()=>$('cores').classList.remove('open');
+$('cores_cfg').onclick=()=>{$('cores').classList.remove('open');$('panel').classList.add('open')};
 $('gear').onclick=()=>$('panel').classList.add('open');
 $('b_close').onclick=()=>$('panel').classList.remove('open');
 function testVoice(){const a=active;active=false;say(`Olá ${cfg.user}, eu sou ${cfg.name}. Todos os sistemas estão online.`,()=>{active=a})}
